@@ -1,12 +1,30 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Icon } from "@/components/ui/Icon";
+import { GroupCard } from "@/components/groups/GroupCard";
+import { groups } from "@/data/groups";
+import { toast } from "sonner";
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const recentSearches = ["Grupo VIP", "Lançamentos", "Mastermind"];
+  const filteredGroups = useMemo(() => {
+    if (!searchQuery.trim()) return groups;
+    const query = searchQuery.toLowerCase();
+    return groups.filter(
+      (group) =>
+        group.name.toLowerCase().includes(query) ||
+        group.description.toLowerCase().includes(query)
+    );
+  }, [searchQuery]);
+
+  const handleJoinGroup = (groupName: string, link?: string) => {
+    if (link) {
+      window.open(link, "_blank");
+    }
+    toast.success(`Acessando ${groupName}...`);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -30,35 +48,43 @@ const Search = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="block w-full pl-10 pr-3 py-3 border-none rounded-xl bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm transition-all"
-            placeholder="O que você procura?"
+            placeholder="Buscar grupo (ex: VIP, 01)..."
           />
         </div>
 
-        {/* Recent Searches */}
-        <div className="mb-8">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
-            Buscas Recentes
+        {/* Results count */}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            {searchQuery ? "Resultados" : "Todos os Grupos"}
           </h3>
-          <div className="flex flex-wrap gap-2">
-            {recentSearches.map((search, i) => (
-              <button
-                key={i}
-                onClick={() => setSearchQuery(search)}
-                className="px-4 py-2 rounded-full bg-card border border-border text-sm font-medium text-foreground hover:bg-secondary transition-colors"
-              >
-                {search}
-              </button>
-            ))}
-          </div>
+          <span className="bg-primary/20 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold">
+            {filteredGroups.length} GRUPOS
+          </span>
         </div>
 
-        {/* Placeholder */}
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <Icon name="manage_search" size={64} className="mx-auto mb-4 opacity-30" />
-            <p className="text-sm">Digite para buscar grupos, conteúdos e mais</p>
+        {/* Groups List */}
+        {filteredGroups.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {filteredGroups.map((group) => (
+              <GroupCard
+                key={group.id}
+                name={group.name}
+                description={group.description}
+                icon={group.icon}
+                isActive
+                showBadge
+                onJoin={() => handleJoinGroup(group.name, group.link)}
+              />
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center text-muted-foreground">
+              <Icon name="search_off" size={64} className="mx-auto mb-4 opacity-30" />
+              <p className="text-sm">Nenhum grupo encontrado para "{searchQuery}"</p>
+            </div>
+          </div>
+        )}
       </main>
 
       <BottomNav />

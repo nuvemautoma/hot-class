@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { StatusCard } from "@/components/dashboard/StatusCard";
+import { LifetimeStatusCard } from "@/components/dashboard/LifetimeStatusCard";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Icon } from "@/components/ui/Icon";
 
@@ -21,28 +21,20 @@ const Dashboard = () => {
 
         {/* Status Card */}
         <div className="px-4 mb-6">
-          <StatusCard
-            planName="Assinatura Premium"
-            isActive={true}
-            expirationDate="25 Dez, 2024"
-            planType="Plano Anual"
-          />
+          <LifetimeStatusCard />
         </div>
 
         {/* Quick Stats */}
         <div className="px-4 mb-8">
           <div className="flex gap-3">
             <StatCard icon="groups" value={12} label="Grupos Acessados" variant="primary" />
-            <StatCard icon="hourglass_top" value={30} label="Dias Restantes" variant="warning" />
+            <StatCard icon="all_inclusive" value="∞" label="Acesso Vitalício" variant="success" />
           </div>
         </div>
 
         {/* Recent Activity Header */}
         <div className="px-5 mb-3 flex items-center justify-between">
           <h3 className="text-base font-bold text-foreground">Acesso Rápido</h3>
-          <button className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-            Ver Histórico
-          </button>
         </div>
 
         {/* Large CTA Button Area */}

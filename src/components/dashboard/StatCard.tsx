@@ -4,11 +4,17 @@ interface StatCardProps {
   icon: string;
   value: string | number;
   label: string;
-  variant?: "primary" | "warning";
+  variant?: "primary" | "warning" | "success";
 }
 
 export const StatCard = ({ icon, value, label, variant = "primary" }: StatCardProps) => {
-  const iconColorClass = variant === "primary" ? "bg-primary/10 text-primary" : "bg-orange-500/10 text-orange-500";
+  const variantStyles = {
+    primary: "bg-primary/10 text-primary",
+    warning: "bg-orange-500/10 text-orange-500",
+    success: "bg-success/10 text-success",
+  };
+
+  const iconColorClass = variantStyles[variant];
 
   return (
     <div className="flex-1 bg-surface/50 rounded-xl p-4 border border-border flex flex-col items-start gap-2">
