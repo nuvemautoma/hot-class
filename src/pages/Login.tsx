@@ -1,14 +1,31 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { signIn, user, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && !loading) {
+      navigate("/");
+    }
+  }, [user, loading, navigate]);
+
+  // Check if blocked
+  useEffect(() => {
+    if (searchParams.get("blocked") === "true") {
+      toast.error("Limite de dispositivos atingido. Contate o suporte para liberar acesso.");
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,13 +37,30 @@ const Login = () => {
 
     setIsLoading(true);
     
-    // Simulate login
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const { error, ipBlocked } = await signIn(email, password);
+    
+    if (error) {
+      if (ipBlocked) {
+        toast.error("Limite de dispositivos atingido. Entre em contato com o suporte.");
+      } else {
+        toast.error(error.message || "Erro ao fazer login");
+      }
+      setIsLoading(false);
+      return;
+    }
     
     toast.success("Login realizado com sucesso!");
     navigate("/");
     setIsLoading(false);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="size-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-screen w-full flex-col justify-center overflow-hidden bg-background">
@@ -55,11 +89,11 @@ const Login = () => {
           {/* Email Field */}
           <div className="flex flex-col gap-2">
             <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
-              Email ou usuário
+              Email
             </label>
             <div className="relative flex items-center">
               <span className="absolute left-4 text-muted-foreground">
-                <Icon name="person" size={20} />
+                <Icon name="mail" size={20} />
               </span>
               <input
                 type="email"
@@ -94,11 +128,6 @@ const Login = () => {
               >
                 <Icon name={showPassword ? "visibility_off" : "visibility"} size={20} />
               </button>
-            </div>
-            <div className="flex justify-end pt-1">
-              <a href="#" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-                Esqueceu a senha?
-              </a>
             </div>
           </div>
 
