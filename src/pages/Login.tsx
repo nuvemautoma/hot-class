@@ -121,7 +121,12 @@ const Login = () => {
         <div className="text-center pt-4">
           <p className="text-muted-foreground text-sm">
             Não tem uma conta?{" "}
-            <a href="#" className="text-foreground font-semibold hover:underline">
+            <a
+              href="https://wa.me/5517982210363"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground font-semibold hover:underline"
+            >
               Solicite acesso
             </a>
           </p>
