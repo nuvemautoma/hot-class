@@ -4,17 +4,15 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { Icon } from "@/components/ui/Icon";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
-type SettingsView = "main" | "edit-name" | "edit-email" | "change-password" | "verify-code" | "notifications";
+type SettingsView = "main" | "edit-name" | "edit-email" | "change-password" | "verify-code" | "notifications" | "unlock-ip";
 
 const Settings = () => {
   const navigate = useNavigate();
+  const { profile, authorizedIPs, signOut, updateProfile, unlockIPSlot, refreshProfile, getMaxIPSlots, user } = useAuth();
   const [currentView, setCurrentView] = useState<SettingsView>("main");
-  
-  // User data (simulated)
-  const [userName, setUserName] = useState("Ricardo Silva");
-  const [userEmail, setUserEmail] = useState("ricardo@email.com");
-  const [emailChanged, setEmailChanged] = useState(false);
   
   // Edit states
   const [editName, setEditName] = useState("");
@@ -27,9 +25,16 @@ const Settings = () => {
   const [verificationCode, setVerificationCode] = useState("");
   const [codeTimer, setCodeTimer] = useState(900); // 15 minutes in seconds
   const [canResend, setCanResend] = useState(false);
+  const [pendingNewPassword, setPendingNewPassword] = useState("");
+  
+  // IP unlock state
+  const [unlockPassword, setUnlockPassword] = useState("");
   
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  
+  // Loading states
+  const [isLoading, setIsLoading] = useState(false);
 
   // Timer for verification code
   useEffect(() => {
@@ -54,28 +59,49 @@ const Settings = () => {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handleSaveName = () => {
+  const handleSaveName = async () => {
     if (!editName.trim()) {
       toast.error("Digite um nome válido");
       return;
     }
-    setUserName(editName);
+    
+    setIsLoading(true);
+    const { error } = await updateProfile({ name: editName });
+    setIsLoading(false);
+    
+    if (error) {
+      toast.error("Erro ao atualizar nome");
+      return;
+    }
+    
     toast.success("Nome atualizado com sucesso!");
     setCurrentView("main");
   };
 
-  const handleSaveEmail = () => {
+  const handleSaveEmail = async () => {
     if (!editEmail.trim() || !editEmail.includes("@")) {
       toast.error("Digite um e-mail válido");
       return;
     }
-    setUserEmail(editEmail);
-    setEmailChanged(true);
+    
+    setIsLoading(true);
+    const { error } = await updateProfile({ email: editEmail, email_changed: true });
+    setIsLoading(false);
+    
+    if (error) {
+      toast.error("Erro ao atualizar e-mail");
+      return;
+    }
+    
     toast.success("E-mail atualizado com sucesso!");
     setCurrentView("main");
   };
 
-  const handleRequestPasswordChange = () => {
+  const generateCode = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
+  const handleRequestPasswordChange = async () => {
     if (!currentPassword) {
       toast.error("Digite sua senha atual");
       return;
@@ -89,40 +115,151 @@ const Settings = () => {
       return;
     }
     
-    // Simulate sending code
-    toast.success("Código de verificação enviado para seu e-mail!");
+    setIsLoading(true);
+    
+    // Verify current password by trying to sign in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: profile?.email || "",
+      password: currentPassword
+    });
+    
+    if (signInError) {
+      setIsLoading(false);
+      toast.error("Senha atual incorreta");
+      return;
+    }
+    
+    // Generate and store verification code
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    
+    const { error: codeError } = await supabase
+      .from("password_reset_codes")
+      .insert({
+        user_id: user?.id,
+        code,
+        expires_at: expiresAt.toISOString()
+      });
+    
+    setIsLoading(false);
+    
+    if (codeError) {
+      toast.error("Erro ao gerar código");
+      return;
+    }
+    
+    // In a real app, send email with code. For now, show code in toast for testing
+    toast.success(`Código de verificação: ${code}`);
+    
+    setPendingNewPassword(newPassword);
     setCodeTimer(900);
     setCanResend(false);
     setCurrentView("verify-code");
   };
 
-  const handleVerifyCode = () => {
+  const handleVerifyCode = async () => {
     if (verificationCode.length !== 6) {
       toast.error("Digite o código de 6 dígitos");
       return;
     }
     
-    // Simulate verification
+    setIsLoading(true);
+    
+    // Check code
+    const { data: codes } = await supabase
+      .from("password_reset_codes")
+      .select("*")
+      .eq("user_id", user?.id)
+      .eq("code", verificationCode)
+      .eq("used", false)
+      .gte("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1);
+    
+    if (!codes || codes.length === 0) {
+      setIsLoading(false);
+      toast.error("Código inválido ou expirado");
+      return;
+    }
+    
+    // Mark code as used
+    await supabase
+      .from("password_reset_codes")
+      .update({ used: true })
+      .eq("id", codes[0].id);
+    
+    // Update password
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: pendingNewPassword
+    });
+    
+    setIsLoading(false);
+    
+    if (updateError) {
+      toast.error("Erro ao atualizar senha");
+      return;
+    }
+    
     toast.success("Senha alterada com sucesso!");
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setVerificationCode("");
+    setPendingNewPassword("");
     setCurrentView("main");
   };
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
+    setIsLoading(true);
+    
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    
+    await supabase
+      .from("password_reset_codes")
+      .insert({
+        user_id: user?.id,
+        code,
+        expires_at: expiresAt.toISOString()
+      });
+    
+    setIsLoading(false);
+    
+    // In a real app, send email. For testing, show in toast
+    toast.success(`Novo código: ${code}`);
     setCodeTimer(900);
     setCanResend(false);
-    toast.success("Novo código enviado!");
+  };
+
+  const handleUnlockIP = async () => {
+    if (!unlockPassword) {
+      toast.error("Digite a senha");
+      return;
+    }
+    
+    setIsLoading(true);
+    const { error } = await unlockIPSlot(unlockPassword);
+    setIsLoading(false);
+    
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    
+    toast.success("Novo slot de IP liberado!");
+    setUnlockPassword("");
+    setCurrentView("main");
+    refreshProfile();
   };
 
   const handleBack = useCallback(() => {
     setCurrentView("main");
     setVerificationCode("");
+    setUnlockPassword("");
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     toast.success("Logout realizado!");
     navigate("/login");
   };
@@ -130,6 +267,12 @@ const Settings = () => {
   const openSupport = () => {
     window.open("https://wa.me/5517982210363", "_blank");
   };
+
+  const userName = profile?.name || "Usuário";
+  const userEmail = profile?.email || "";
+  const emailChanged = profile?.email_changed || false;
+  const usedIPs = authorizedIPs.length;
+  const maxIPs = getMaxIPSlots();
 
   // Main settings view
   if (currentView === "main") {
@@ -150,6 +293,33 @@ const Settings = () => {
             <div className="flex-1">
               <h3 className="font-bold text-foreground">{userName}</h3>
               <p className="text-sm text-muted-foreground">{userEmail}</p>
+            </div>
+          </div>
+
+          {/* IP Info Card */}
+          <div className="bg-card rounded-xl p-4 border border-border mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Icon name="devices" className="text-primary" size={20} />
+                <span className="font-medium text-foreground">Dispositivos Autorizados</span>
+              </div>
+              <span className="text-sm font-bold text-primary">{usedIPs}/{maxIPs}</span>
+            </div>
+            <div className="space-y-2">
+              {authorizedIPs.map((ip, index) => (
+                <div key={ip.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Icon name="check_circle" className="text-success" size={16} />
+                  <span>Dispositivo {index + 1}</span>
+                  {ip.is_extra_slot && (
+                    <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">EXTRA</span>
+                  )}
+                </div>
+              ))}
+              {usedIPs < maxIPs && (
+                <p className="text-xs text-muted-foreground">
+                  {maxIPs - usedIPs} slot(s) disponível(is)
+                </p>
+              )}
             </div>
           </div>
 
@@ -197,6 +367,16 @@ const Settings = () => {
             >
               <Icon name="lock" className="text-muted-foreground" size={22} />
               <span className="flex-1 text-left font-medium text-foreground">Alterar Senha</span>
+              <Icon name="chevron_right" className="text-muted-foreground" size={20} />
+            </button>
+
+            {/* Unlock IP */}
+            <button
+              onClick={() => setCurrentView("unlock-ip")}
+              className="w-full flex items-center gap-4 px-4 py-4 hover:bg-secondary transition-colors border-b border-border"
+            >
+              <Icon name="vpn_key" className="text-muted-foreground" size={22} />
+              <span className="flex-1 text-left font-medium text-foreground">Liberar IP</span>
               <Icon name="chevron_right" className="text-muted-foreground" size={20} />
             </button>
 
@@ -267,9 +447,10 @@ const Settings = () => {
             />
             <button
               onClick={handleSaveName}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors"
+              disabled={isLoading}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors disabled:opacity-50"
             >
-              Salvar
+              {isLoading ? "Salvando..." : "Salvar"}
             </button>
           </div>
         </main>
@@ -312,9 +493,10 @@ const Settings = () => {
             />
             <button
               onClick={handleSaveEmail}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors"
+              disabled={isLoading}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors disabled:opacity-50"
             >
-              Salvar
+              {isLoading ? "Salvando..." : "Salvar"}
             </button>
           </div>
         </main>
@@ -377,9 +559,10 @@ const Settings = () => {
 
             <button
               onClick={handleRequestPasswordChange}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors"
+              disabled={isLoading}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors disabled:opacity-50"
             >
-              Enviar Código
+              {isLoading ? "Enviando..." : "Enviar Código"}
             </button>
           </div>
         </main>
@@ -435,18 +618,64 @@ const Settings = () => {
 
             <button
               onClick={handleVerifyCode}
-              disabled={codeTimer === 0}
+              disabled={codeTimer === 0 || isLoading}
               className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Verificar
+              {isLoading ? "Verificando..." : "Verificar"}
             </button>
 
             <button
               onClick={handleResendCode}
-              disabled={!canResend && codeTimer > 0}
+              disabled={(!canResend && codeTimer > 0) || isLoading}
               className="w-full h-12 border border-border text-foreground font-medium rounded-xl transition-colors hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Reenviar Código
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Unlock IP View
+  if (currentView === "unlock-ip") {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+          <div className="flex items-center px-4 py-3">
+            <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors">
+              <Icon name="arrow_back" size={24} />
+            </button>
+            <h1 className="flex-1 text-center text-lg font-bold">Liberar IP</h1>
+            <div className="w-10" />
+          </div>
+        </header>
+
+        <main className="flex-1 flex flex-col w-full max-w-md mx-auto px-4 pt-6">
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6">
+            <div className="flex gap-3">
+              <Icon name="info" className="text-primary shrink-0" size={20} />
+              <p className="text-sm text-foreground">
+                Digite a senha especial para liberar mais um slot de dispositivo.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <label className="text-sm font-medium text-foreground">Senha de liberação</label>
+            <input
+              type="password"
+              value={unlockPassword}
+              onChange={(e) => setUnlockPassword(e.target.value)}
+              className="w-full rounded-xl border border-border bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 h-12 px-4"
+              placeholder="Digite a senha"
+            />
+            <button
+              onClick={handleUnlockIP}
+              disabled={isLoading}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors disabled:opacity-50"
+            >
+              {isLoading ? "Liberando..." : "Liberar Slot"}
             </button>
           </div>
         </main>
