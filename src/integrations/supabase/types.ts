@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action: string
+          admin_email: string
+          admin_id: string
+          admin_name: string
+          created_at: string
+          details: Json | null
+          id: string
+        }
+        Insert: {
+          action: string
+          admin_email: string
+          admin_id: string
+          admin_name: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+        }
+        Update: {
+          action?: string
+          admin_email?: string
+          admin_id?: string
+          admin_name?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+        }
+        Relationships: []
+      }
       authorized_ips: {
         Row: {
           created_at: string
@@ -38,6 +68,33 @@ export type Database = {
         }
         Relationships: []
       }
+      groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          link: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          link: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          link?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ip_unlock_slots: {
         Row: {
           id: string
@@ -53,6 +110,36 @@ export type Database = {
           id?: string
           unlocked_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          message: string
+          read: boolean
+          target_user_id: string | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          message: string
+          read?: boolean
+          target_user_id?: string | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          message?: string
+          read?: boolean
+          target_user_id?: string | null
+          title?: string
         }
         Relationships: []
       }

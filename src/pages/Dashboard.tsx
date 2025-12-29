@@ -6,16 +6,25 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { Icon } from "@/components/ui/Icon";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { groups } from "@/data/groups";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { profile, authorizedIPs, getMaxIPSlots } = useAuth();
+  const { profile } = useAuth();
+  const [groupsCount, setGroupsCount] = useState(0);
 
   const firstName = profile?.name?.split(" ")[0] || "Usuário";
-  const accessedGroups = groups.length;
-  const usedIPs = authorizedIPs.length;
-  const maxIPs = getMaxIPSlots();
+
+  useEffect(() => {
+    const fetchGroupsCount = async () => {
+      const { count } = await supabase
+        .from("groups")
+        .select("*", { count: "exact", head: true });
+      setGroupsCount(count || 0);
+    };
+    fetchGroupsCount();
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -42,14 +51,14 @@ const Dashboard = () => {
           <div className="flex gap-3">
             <StatCard
               icon="groups"
-              value={accessedGroups}
+              value={groupsCount}
               label="Grupos Disponíveis"
               variant="primary"
             />
             <StatCard
-              icon="devices"
-              value={`${usedIPs}/${maxIPs}`}
-              label="Dispositivos"
+              icon="verified"
+              value="Ativo"
+              label="Status da Conta"
               variant="success"
             />
           </div>
