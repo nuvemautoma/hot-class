@@ -28,9 +28,13 @@ interface AuthContextType {
   loading: boolean;
   currentIP: string | null;
   ipBlocked: boolean;
+  isOwner: boolean;
+  isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null; ipBlocked?: boolean }>;
+  signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
   unlockIPSlot: (password: string) => Promise<{ error: Error | null }>;
   refreshProfile: () => Promise<void>;
   getMaxIPSlots: () => number;
@@ -47,6 +51,7 @@ export const useAuth = () => {
 };
 
 const IP_UNLOCK_PASSWORD = "HCLASS14";
+const OWNER_EMAIL = "hotclass@dono.com";
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -56,6 +61,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [currentIP, setCurrentIP] = useState<string | null>(null);
   const [ipBlocked, setIpBlocked] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Get current IP
   const fetchCurrentIP = async () => {
@@ -70,18 +77,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Get number of extra IP slots
-  const getExtraSlots = async (userId: string) => {
-    const { data } = await supabase
-      .from("ip_unlock_slots")
-      .select("id")
-      .eq("user_id", userId);
-    return data?.length || 0;
-  };
-
   // Get max allowed IPs
   const getMaxIPSlots = () => {
-    // Base 3 + any extra slots unlocked
     const extraSlots = authorizedIPs.filter(ip => ip.is_extra_slot).length;
     return 3 + extraSlots;
   };
@@ -101,14 +98,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const maxSlots = 3 + (extraSlots?.length || 0);
     const existingIPs = ips || [];
 
-    // Check if IP already authorized
     if (existingIPs.some(existingIP => existingIP.ip_address === ip)) {
       return true;
     }
 
-    // Check if we have slots available
     if (existingIPs.length < maxSlots) {
-      // Register new IP
       await supabase.from("authorized_ips").insert({
         user_id: userId,
         ip_address: ip,
@@ -117,8 +111,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return true;
     }
 
-    // No slots available, IP blocked
     return false;
+  };
+
+  // Check admin status
+  const checkAdminStatus = async (userId: string, email: string) => {
+    // Check if owner
+    if (email === OWNER_EMAIL) {
+      setIsOwner(true);
+      setIsAdmin(true);
+      return;
+    }
+
+    setIsOwner(false);
+
+    // Check if admin in user_roles
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    setIsAdmin(!!data);
   };
 
   // Fetch profile
@@ -131,6 +146,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     if (data) {
       setProfile(data);
+      await checkAdminStatus(userId, data.email);
     }
   };
 
@@ -150,14 +166,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Initialize auth
   useEffect(() => {
     const initAuth = async () => {
-      // Set up auth state listener FIRST
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           setSession(session);
           setUser(session?.user ?? null);
 
           if (session?.user) {
-            // Defer fetching to avoid deadlock
             setTimeout(() => {
               fetchProfile(session.user.id);
               fetchAuthorizedIPs(session.user.id);
@@ -166,11 +180,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setProfile(null);
             setAuthorizedIPs([]);
             setIpBlocked(false);
+            setIsOwner(false);
+            setIsAdmin(false);
           }
         }
       );
 
-      // THEN check for existing session
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
@@ -179,7 +194,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await fetchProfile(session.user.id);
         await fetchAuthorizedIPs(session.user.id);
         
-        // Check IP on existing session
         const ip = await fetchCurrentIP();
         if (ip) {
           const isAuthorized = await checkIPAuthorization(session.user.id, ip);
@@ -253,12 +267,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error: null };
   };
 
+  // Sign up
+  const signUp = async (email: string, password: string, name: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: { name }
+      }
+    });
+
+    return { error };
+  };
+
   // Sign out
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
     setAuthorizedIPs([]);
     setIpBlocked(false);
+    setIsOwner(false);
+    setIsAdmin(false);
   };
 
   // Update profile
@@ -273,6 +305,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!error) {
       await fetchProfile(user.id);
     }
+
+    return { error };
+  };
+
+  // Update password (simplified - no verification needed)
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
 
     return { error };
   };
@@ -314,9 +355,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loading,
         currentIP,
         ipBlocked,
+        isOwner,
+        isAdmin,
         signIn,
+        signUp,
         signOut,
         updateProfile,
+        updatePassword,
         unlockIPSlot,
         refreshProfile,
         getMaxIPSlots

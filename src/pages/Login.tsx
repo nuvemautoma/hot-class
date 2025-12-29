@@ -4,12 +4,17 @@ import { Icon } from "@/components/ui/Icon";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
+type AuthView = "login" | "signup" | "forgot-password";
+
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signIn, user, loading } = useAuth();
+  const { signIn, signUp, user, loading } = useAuth();
+  const [view, setView] = useState<AuthView>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,7 +32,7 @@ const Login = () => {
     }
   }, [searchParams]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password) {
@@ -54,6 +59,52 @@ const Login = () => {
     setIsLoading(false);
   };
 
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!name || !email || !password || !confirmPassword) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("A senha deve ter pelo menos 6 caracteres");
+      return;
+    }
+
+    setIsLoading(true);
+    
+    const { error } = await signUp(email, password, name);
+    
+    if (error) {
+      if (error.message.includes("already registered")) {
+        toast.error("Este e-mail já está cadastrado");
+      } else {
+        toast.error(error.message || "Erro ao criar conta");
+      }
+      setIsLoading(false);
+      return;
+    }
+    
+    toast.success("Conta criada com sucesso! Faça login.");
+    setView("login");
+    setPassword("");
+    setConfirmPassword("");
+    setIsLoading(false);
+  };
+
+  const resetForm = () => {
+    setEmail("");
+    setPassword("");
+    setName("");
+    setConfirmPassword("");
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -72,93 +123,213 @@ const Login = () => {
         {/* Logo Section */}
         <div className="flex flex-col items-center gap-6">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center shadow-lg shadow-primary/20">
-            <Icon name="lock_open" className="text-primary-foreground" size={32} />
+            <Icon name={view === "signup" ? "person_add" : "lock_open"} className="text-primary-foreground" size={32} />
           </div>
           <div className="text-center space-y-2">
             <h1 className="text-foreground tracking-tight text-3xl font-bold leading-tight">
-              Área de Acesso
+              {view === "login" ? "Área de Acesso" : view === "signup" ? "Criar Conta" : "Recuperar Senha"}
             </h1>
             <p className="text-muted-foreground text-base font-normal leading-normal">
-              Bem-vindo de volta
+              {view === "login" ? "Bem-vindo de volta" : view === "signup" ? "Preencha seus dados" : "Enviaremos instruções"}
             </p>
           </div>
         </div>
 
-        {/* Form Section */}
-        <form className="flex flex-col gap-5 w-full" onSubmit={handleSubmit}>
-          {/* Email Field */}
-          <div className="flex flex-col gap-2">
-            <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
-              Email
-            </label>
-            <div className="relative flex items-center">
-              <span className="absolute left-4 text-muted-foreground">
-                <Icon name="mail" size={20} />
-              </span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-4 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
-                placeholder="ex: nome@empresa.com"
-              />
+        {/* Login Form */}
+        {view === "login" && (
+          <form className="flex flex-col gap-5 w-full" onSubmit={handleLogin}>
+            {/* Email Field */}
+            <div className="flex flex-col gap-2">
+              <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
+                Email
+              </label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-muted-foreground">
+                  <Icon name="mail" size={20} />
+                </span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-4 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
+                  placeholder="ex: nome@empresa.com"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Password Field */}
-          <div className="flex flex-col gap-2">
-            <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
-              Senha
-            </label>
-            <div className="relative flex w-full items-center">
-              <span className="absolute left-4 text-muted-foreground">
-                <Icon name="key" size={20} />
-              </span>
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-12 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
-                placeholder="Digite sua senha"
-              />
+            {/* Password Field */}
+            <div className="flex flex-col gap-2">
+              <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
+                Senha
+              </label>
+              <div className="relative flex w-full items-center">
+                <span className="absolute left-4 text-muted-foreground">
+                  <Icon name="key" size={20} />
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-12 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
+                  placeholder="Digite sua senha"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-0 top-0 h-full px-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Icon name={showPassword ? "visibility_off" : "visibility"} size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <div className="pt-2">
               <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-0 top-0 h-full px-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-12 bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground font-bold text-base rounded-xl transition-all duration-200 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Icon name={showPassword ? "visibility_off" : "visibility"} size={20} />
+                <span>{isLoading ? "Entrando..." : "Entrar"}</span>
+                {!isLoading && (
+                  <Icon name="arrow_forward" size={20} className="transition-transform group-hover:translate-x-1" />
+                )}
               </button>
             </div>
-          </div>
+          </form>
+        )}
 
-          {/* Action Button */}
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-12 bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground font-bold text-base rounded-xl transition-all duration-200 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span>{isLoading ? "Entrando..." : "Entrar"}</span>
-              {!isLoading && (
-                <Icon name="arrow_forward" size={20} className="transition-transform group-hover:translate-x-1" />
-              )}
-            </button>
-          </div>
-        </form>
+        {/* Signup Form */}
+        {view === "signup" && (
+          <form className="flex flex-col gap-4 w-full" onSubmit={handleSignUp}>
+            {/* Name Field */}
+            <div className="flex flex-col gap-2">
+              <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
+                Nome
+              </label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-muted-foreground">
+                  <Icon name="person" size={20} />
+                </span>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-4 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
+                  placeholder="Seu nome completo"
+                />
+              </div>
+            </div>
+
+            {/* Email Field */}
+            <div className="flex flex-col gap-2">
+              <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
+                Email
+              </label>
+              <div className="relative flex items-center">
+                <span className="absolute left-4 text-muted-foreground">
+                  <Icon name="mail" size={20} />
+                </span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-4 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
+                  placeholder="ex: nome@empresa.com"
+                />
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div className="flex flex-col gap-2">
+              <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
+                Senha
+              </label>
+              <div className="relative flex w-full items-center">
+                <span className="absolute left-4 text-muted-foreground">
+                  <Icon name="key" size={20} />
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-12 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
+                  placeholder="Mínimo 6 caracteres"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-0 top-0 h-full px-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Icon name={showPassword ? "visibility_off" : "visibility"} size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password Field */}
+            <div className="flex flex-col gap-2">
+              <label className="text-foreground/90 text-sm font-medium leading-normal pl-1">
+                Confirmar Senha
+              </label>
+              <div className="relative flex w-full items-center">
+                <span className="absolute left-4 text-muted-foreground">
+                  <Icon name="key" size={20} />
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-input focus:bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary h-12 pl-12 pr-4 placeholder:text-muted-foreground/50 text-base transition-all duration-200"
+                  placeholder="Repita a senha"
+                />
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-12 bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground font-bold text-base rounded-xl transition-all duration-200 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>{isLoading ? "Criando..." : "Criar Conta"}</span>
+                {!isLoading && (
+                  <Icon name="arrow_forward" size={20} className="transition-transform group-hover:translate-x-1" />
+                )}
+              </button>
+            </div>
+          </form>
+        )}
 
         {/* Footer */}
         <div className="text-center pt-4">
-          <p className="text-muted-foreground text-sm">
-            Não tem uma conta?{" "}
-            <a
-              href="https://wa.me/5517982210363"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-foreground font-semibold hover:underline"
-            >
-              Solicite acesso
-            </a>
-          </p>
+          {view === "login" ? (
+            <p className="text-muted-foreground text-sm">
+              Não tem uma conta?{" "}
+              <button
+                onClick={() => {
+                  resetForm();
+                  setView("signup");
+                }}
+                className="text-foreground font-semibold hover:underline"
+              >
+                Criar conta
+              </button>
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Já tem uma conta?{" "}
+              <button
+                onClick={() => {
+                  resetForm();
+                  setView("login");
+                }}
+                className="text-foreground font-semibold hover:underline"
+              >
+                Fazer login
+              </button>
+            </p>
+          )}
         </div>
 
         {/* Trust Indicator */}
