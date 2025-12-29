@@ -8,15 +8,15 @@ interface AdminRouteProps {
 }
 
 export const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { user, loading, ipBlocked, isOwner, isAdmin } = useAuth();
+  const { user, loading, ipBlocked, isOwner } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && user && !isOwner && !isAdmin) {
+    if (!loading && user && !isOwner) {
       toast.error("Acesso negado");
       navigate("/", { replace: true });
     }
-  }, [loading, user, isOwner, isAdmin, navigate]);
+  }, [loading, user, isOwner, navigate]);
 
   if (loading) {
     return (
@@ -37,7 +37,7 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isOwner && !isAdmin) {
+  if (!isOwner) {
     return <Navigate to="/" replace />;
   }
 

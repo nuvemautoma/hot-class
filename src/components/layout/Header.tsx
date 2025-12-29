@@ -1,7 +1,7 @@
 import { Icon } from "@/components/ui/Icon";
-import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 interface HeaderProps {
   showUserInfo?: boolean;
@@ -11,6 +11,7 @@ interface HeaderProps {
 
 export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userStatus = "Acesso Total" }: HeaderProps) => {
   const location = useLocation();
+  const { isOwner } = useAuth();
   
   const navItems = [
     { path: "/", label: "Início", icon: "dashboard" },
@@ -18,6 +19,7 @@ export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userSta
     { path: "/buscar", label: "Buscar", icon: "search" },
     { path: "/alertas", label: "Alertas", icon: "notifications" },
     { path: "/ajustes", label: "Ajustes", icon: "settings" },
+    ...(isOwner ? [{ path: "/admin", label: "Admin", icon: "admin_panel_settings" }] : []),
   ];
 
   return (
