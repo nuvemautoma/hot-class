@@ -214,19 +214,34 @@ const Admin = () => {
       }
     }
 
-    // Note: Password changes via admin API not available in client-side
-    // Users can change their own password via Settings
+    // Update password via edge function
     if (editUserForm.password) {
-      toast.info("Alteração de senha pelo admin requer acesso ao painel Supabase");
+      const { data, error } = await supabase.functions.invoke("admin-update-password", {
+        body: {
+          targetUserId: editingUser.user_id,
+          newPassword: editUserForm.password,
+        },
+      });
+
+      if (error) {
+        toast.error("Erro ao atualizar senha: " + error.message);
+        return;
+      }
+
+      if (data?.error) {
+        toast.error("Erro ao atualizar senha: " + data.error);
+        return;
+      }
     }
 
     await logAction("Editou conta", { 
       email: editingUser.email, 
-      changes: updates,
+      changes: { ...updates, passwordChanged: !!editUserForm.password },
     });
     toast.success("Conta atualizada!");
     setEditAccountOpen(false);
     setEditingUser(null);
+    setEditUserForm({ name: "", email: "", password: "" });
     fetchUsers();
   };
 

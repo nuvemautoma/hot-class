@@ -11,7 +11,7 @@ interface HeaderProps {
 
 export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userStatus = "Acesso Total" }: HeaderProps) => {
   const location = useLocation();
-  const { isOwner } = useAuth();
+  const { isOwner, isAdmin } = useAuth();
   
   const navItems = [
     { path: "/", label: "Início", icon: "dashboard" },
@@ -19,7 +19,7 @@ export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userSta
     { path: "/buscar", label: "Buscar", icon: "search" },
     { path: "/alertas", label: "Alertas", icon: "notifications" },
     { path: "/ajustes", label: "Ajustes", icon: "settings" },
-    ...(isOwner ? [{ path: "/admin", label: "Admin", icon: "admin_panel_settings" }] : []),
+    ...((isOwner || isAdmin) ? [{ path: "/admin", label: "Admin", icon: "admin_panel_settings" }] : []),
   ];
 
   return (
