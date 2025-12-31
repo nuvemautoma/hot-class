@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading, ipBlocked } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -18,10 +18,6 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         </div>
       </div>
     );
-  }
-
-  if (ipBlocked) {
-    return <Navigate to="/login?blocked=true" replace />;
   }
 
   if (!user) {

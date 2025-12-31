@@ -8,7 +8,7 @@ interface AdminRouteProps {
 }
 
 export const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { user, loading, ipBlocked, isOwner } = useAuth();
+  const { user, loading, isOwner } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -27,10 +27,6 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
         </div>
       </div>
     );
-  }
-
-  if (ipBlocked) {
-    return <Navigate to="/login?blocked=true" replace />;
   }
 
   if (!user) {

@@ -144,7 +144,7 @@ const Admin = () => {
       admin_id: user.id,
       admin_name: profile.name,
       admin_email: profile.email,
-      details: details as unknown,
+      details: details ? JSON.parse(JSON.stringify(details)) : null,
     }]);
     fetchLogs();
   };
@@ -168,11 +168,14 @@ const Admin = () => {
       return;
     }
 
-    const { data, error } = await supabase.auth.admin.createUser({
+    // Use signUp instead of admin API (admin API requires service role key which is not available in client)
+    const { error } = await supabase.auth.signUp({
       email: newAccount.email,
       password: newAccount.password,
-      email_confirm: true,
-      user_metadata: { name: newAccount.name },
+      options: {
+        data: { name: newAccount.name },
+        emailRedirectTo: `${window.location.origin}/`,
+      }
     });
 
     if (error) {
@@ -184,7 +187,8 @@ const Admin = () => {
     toast.success("Conta criada com sucesso!");
     setNewAccount({ name: "", email: "", password: "" });
     setCreateAccountOpen(false);
-    fetchUsers();
+    // Wait a bit for the profile trigger to create the profile
+    setTimeout(() => fetchUsers(), 1000);
   };
 
   const handleEditUser = async () => {
@@ -210,20 +214,15 @@ const Admin = () => {
       }
     }
 
+    // Note: Password changes via admin API not available in client-side
+    // Users can change their own password via Settings
     if (editUserForm.password) {
-      const { error } = await supabase.auth.admin.updateUserById(editingUser.user_id, {
-        password: editUserForm.password,
-      });
-      if (error) {
-        toast.error("Erro ao alterar senha: " + error.message);
-        return;
-      }
+      toast.info("Alteração de senha pelo admin requer acesso ao painel Supabase");
     }
 
     await logAction("Editou conta", { 
       email: editingUser.email, 
       changes: updates,
-      passwordChanged: !!editUserForm.password 
     });
     toast.success("Conta atualizada!");
     setEditAccountOpen(false);
@@ -240,7 +239,8 @@ const Admin = () => {
     const confirmed = window.confirm(`Tem certeza que deseja excluir a conta de ${userProfile.email}?`);
     if (!confirmed) return;
 
-    const { error } = await supabase.auth.admin.deleteUser(userProfile.user_id);
+    // Delete profile (user will remain in auth but won't have app access)
+    const { error } = await supabase.from("profiles").delete().eq("user_id", userProfile.user_id);
     if (error) {
       toast.error("Erro ao excluir: " + error.message);
       return;
