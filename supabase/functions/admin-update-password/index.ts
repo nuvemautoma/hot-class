@@ -51,13 +51,41 @@ Deno.serve(async (req) => {
     }
 
     // Get request body
-    const { targetUserId, newPassword } = await req.json();
-    if (!targetUserId || !newPassword) {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { targetUserId, newPassword } = (body ?? {}) as {
+      targetUserId?: string;
+      newPassword?: string;
+    };
+
+    if (typeof targetUserId !== "string" || typeof newPassword !== "string") {
       return new Response(JSON.stringify({ error: "Missing targetUserId or newPassword" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const trimmedPassword = newPassword.trim();
+    if (trimmedPassword.length < 8 || trimmedPassword.length > 72) {
+      return new Response(JSON.stringify({ error: "Password must be between 8 and 72 characters" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log("admin-update-password: request", {
+      requestingUserId: requestingUser.id,
+      targetUserId,
+      passwordLength: trimmedPassword.length,
+    });
 
     // Prevent changing owner password unless you are the owner
     const { data: targetIsOwner } = await supabaseAdmin.rpc("is_owner", { _user_id: targetUserId });
@@ -70,7 +98,7 @@ Deno.serve(async (req) => {
 
     // Update user password using admin API
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
-      password: newPassword,
+      password: trimmedPassword,
     });
 
     if (updateError) {

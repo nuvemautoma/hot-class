@@ -57,7 +57,7 @@ interface IPCount {
 }
 
 const Admin = () => {
-  const { user, profile, isOwner } = useAuth();
+  const { user, profile, isOwner, session } = useAuth();
   const [activeTab, setActiveTab] = useState("accounts");
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
@@ -216,7 +216,15 @@ const Admin = () => {
 
     // Update password via edge function
     if (editUserForm.password) {
+      if (!session?.access_token) {
+        toast.error("Sessão inválida. Faça login novamente.");
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("admin-update-password", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           targetUserId: editingUser.user_id,
           newPassword: editUserForm.password,
