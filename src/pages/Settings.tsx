@@ -6,11 +6,11 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
-type SettingsView = "main" | "edit-name" | "edit-email" | "change-password" | "notifications" | "unlock-ip";
+type SettingsView = "main" | "edit-name" | "edit-email" | "change-password" | "notifications";
 
 const Settings = () => {
   const navigate = useNavigate();
-  const { profile, signOut, updateProfile, updatePassword, unlockIPSlot, refreshProfile, isOwner, isAdmin } = useAuth();
+  const { profile, signOut, updateProfile, updatePassword, refreshProfile, isOwner, isAdmin } = useAuth();
   const [currentView, setCurrentView] = useState<SettingsView>("main");
   
   // Edit states
@@ -18,9 +18,6 @@ const Settings = () => {
   const [editEmail, setEditEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  
-  // IP unlock state
-  const [unlockPassword, setUnlockPassword] = useState("");
   
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -91,30 +88,8 @@ const Settings = () => {
     setCurrentView("main");
   };
 
-  const handleUnlockIP = async () => {
-    if (!unlockPassword) {
-      toast.error("Digite a senha");
-      return;
-    }
-    
-    setIsLoading(true);
-    const { error } = await unlockIPSlot(unlockPassword);
-    setIsLoading(false);
-    
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    
-    toast.success("Novo slot de IP liberado!");
-    setUnlockPassword("");
-    setCurrentView("main");
-    refreshProfile();
-  };
-
   const handleBack = useCallback(() => {
     setCurrentView("main");
-    setUnlockPassword("");
     setNewPassword("");
     setConfirmPassword("");
   }, []);
@@ -207,18 +182,6 @@ const Settings = () => {
               <Icon name="chevron_right" className="text-muted-foreground" size={20} />
             </button>
 
-            {/* Unlock IP - Only show for owner/admin */}
-            {(isOwner || isAdmin) && (
-              <button
-                onClick={() => setCurrentView("unlock-ip")}
-                className="w-full flex items-center gap-4 px-4 py-4 hover:bg-secondary transition-colors border-b border-border"
-              >
-                <Icon name="vpn_key" className="text-muted-foreground" size={22} />
-                <span className="flex-1 text-left font-medium text-foreground">Liberar IP</span>
-                <Icon name="chevron_right" className="text-muted-foreground" size={20} />
-              </button>
-            )}
-
             {/* Notifications */}
             <button
               onClick={() => setCurrentView("notifications")}
@@ -229,8 +192,8 @@ const Settings = () => {
               <Icon name="chevron_right" className="text-muted-foreground" size={20} />
             </button>
 
-            {/* Admin Panel - Only show for owner/admin */}
-            {(isOwner || isAdmin) && (
+            {/* Admin Panel - Only show for owner */}
+            {isOwner && (
               <button
                 onClick={() => navigate("/admin")}
                 className="w-full flex items-center gap-4 px-4 py-4 hover:bg-secondary transition-colors border-b border-border"
@@ -355,7 +318,7 @@ const Settings = () => {
     );
   }
 
-  // Change Password View (Simplified - no current password, no verification)
+  // Change Password View
   if (currentView === "change-password") {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -406,52 +369,6 @@ const Settings = () => {
     );
   }
 
-  // Unlock IP View
-  if (currentView === "unlock-ip") {
-    return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-          <div className="flex items-center px-4 py-3">
-            <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-secondary transition-colors">
-              <Icon name="arrow_back" size={24} />
-            </button>
-            <h1 className="flex-1 text-center text-lg font-bold">Liberar IP</h1>
-            <div className="w-10" />
-          </div>
-        </header>
-
-        <main className="flex-1 flex flex-col w-full max-w-md mx-auto px-4 pt-6">
-          <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6">
-            <div className="flex gap-3">
-              <Icon name="info" className="text-primary shrink-0" size={20} />
-              <p className="text-sm text-foreground">
-                Digite a senha especial para liberar mais um slot de dispositivo.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <label className="text-sm font-medium text-foreground">Senha de liberação</label>
-            <input
-              type="password"
-              value={unlockPassword}
-              onChange={(e) => setUnlockPassword(e.target.value)}
-              className="w-full rounded-xl border border-border bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 h-12 px-4"
-              placeholder="Digite a senha"
-            />
-            <button
-              onClick={handleUnlockIP}
-              disabled={isLoading}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors disabled:opacity-50"
-            >
-              {isLoading ? "Liberando..." : "Liberar Slot"}
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   // Notifications View
   if (currentView === "notifications") {
     return (
@@ -469,23 +386,28 @@ const Settings = () => {
         <main className="flex-1 flex flex-col w-full max-w-md mx-auto px-4 pt-6">
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="flex items-center justify-between px-4 py-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <Icon name="notifications" className="text-muted-foreground" size={22} />
-                <span className="font-medium text-foreground">Receber notificações</span>
+                <span className="font-medium text-foreground">Ativar notificações</span>
               </div>
               <button
-                onClick={() => {
-                  setNotificationsEnabled(!notificationsEnabled);
-                  toast.success(notificationsEnabled ? "Notificações desativadas" : "Notificações ativadas");
-                }}
-                className={`relative w-12 h-6 rounded-full transition-colors ${notificationsEnabled ? "bg-primary" : "bg-muted"}`}
+                onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                className={`w-12 h-7 rounded-full transition-colors relative ${
+                  notificationsEnabled ? "bg-primary" : "bg-muted"
+                }`}
               >
-                <span
-                  className={`absolute top-1 size-4 bg-white rounded-full transition-transform ${notificationsEnabled ? "translate-x-6" : "translate-x-1"}`}
+                <div
+                  className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${
+                    notificationsEnabled ? "left-6" : "left-1"
+                  }`}
                 />
               </button>
             </div>
           </div>
+
+          <p className="text-sm text-muted-foreground mt-4 px-2">
+            Receba alertas importantes sobre novos grupos, atualizações e avisos do sistema.
+          </p>
         </main>
       </div>
     );

@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
-type AuthView = "login" | "signup" | "forgot-password";
+type AuthView = "login" | "signup";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { signIn, signUp, user, loading } = useAuth();
   const [view, setView] = useState<AuthView>("login");
   const [email, setEmail] = useState("");
@@ -25,13 +24,6 @@ const Login = () => {
     }
   }, [user, loading, navigate]);
 
-  // Check if blocked
-  useEffect(() => {
-    if (searchParams.get("blocked") === "true") {
-      toast.error("Limite de dispositivos atingido. Contate o suporte para liberar acesso.");
-    }
-  }, [searchParams]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -42,14 +34,10 @@ const Login = () => {
 
     setIsLoading(true);
     
-    const { error, ipBlocked } = await signIn(email, password);
+    const { error } = await signIn(email, password);
     
     if (error) {
-      if (ipBlocked) {
-        toast.error("Limite de dispositivos atingido. Entre em contato com o suporte.");
-      } else {
-        toast.error(error.message || "Erro ao fazer login");
-      }
+      toast.error(error.message || "Erro ao fazer login");
       setIsLoading(false);
       return;
     }
@@ -127,10 +115,10 @@ const Login = () => {
           </div>
           <div className="text-center space-y-2">
             <h1 className="text-foreground tracking-tight text-3xl font-bold leading-tight">
-              {view === "login" ? "Área de Acesso" : view === "signup" ? "Criar Conta" : "Recuperar Senha"}
+              {view === "login" ? "Área de Acesso" : "Criar Conta"}
             </h1>
             <p className="text-muted-foreground text-base font-normal leading-normal">
-              {view === "login" ? "Bem-vindo de volta" : view === "signup" ? "Preencha seus dados" : "Enviaremos instruções"}
+              {view === "login" ? "Bem-vindo de volta" : "Preencha seus dados"}
             </p>
           </div>
         </div>

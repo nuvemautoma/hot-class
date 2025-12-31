@@ -1,54 +1,49 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { SupportButton } from "@/components/layout/SupportButton";
 import { GroupCard } from "@/components/groups/GroupCard";
 import { Icon } from "@/components/ui/Icon";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
-const groupsData = [
-  {
-    id: 1,
-    name: "Grupo Alpha VIP",
-    description: "Networking de alto nível & vendas.",
-    icon: "diamond",
-    isActive: true,
-  },
-  {
-    id: 2,
-    name: "Lançamentos 2024",
-    description: "Updates diários e materiais.",
-    icon: "rocket_launch",
-    isActive: true,
-  },
-  {
-    id: 3,
-    name: "Black Elite Club",
-    description: "Mentoria exclusiva para membros.",
-    icon: "crown",
-    isActive: true,
-  },
-  {
-    id: 4,
-    name: "Mastermind 100k",
-    description: "Estratégias avançadas de escala.",
-    icon: "stars",
-    isActive: true,
-  },
-];
+interface Group {
+  id: string;
+  name: string;
+  description: string | null;
+  link: string;
+  created_at: string;
+}
 
 const Groups = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredGroups = groupsData.filter(
+  useEffect(() => {
+    fetchGroups();
+  }, []);
+
+  const fetchGroups = async () => {
+    const { data, error } = await supabase
+      .from("groups")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (!error && data) {
+      setGroups(data);
+    }
+    setLoading(false);
+  };
+
+  const filteredGroups = groups.filter(
     (group) =>
       group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      group.description.toLowerCase().includes(searchQuery.toLowerCase())
+      (group.description || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const activeGroups = filteredGroups.filter((g) => g.isActive);
-
-  const handleJoinGroup = (groupName: string) => {
+  const handleJoinGroup = (groupName: string, link: string) => {
+    window.open(link, "_blank");
     toast.success(`Acessando ${groupName}...`);
   };
 
@@ -92,25 +87,29 @@ const Groups = () => {
               Grupos Liberados
             </h3>
             <span className="bg-primary/20 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold">
-              {activeGroups.length} ATIVOS
+              {filteredGroups.length} ATIVOS
             </span>
           </div>
 
-          {filteredGroups.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="size-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : filteredGroups.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <Icon name="search_off" size={48} className="mx-auto mb-2 opacity-50" />
-              <p>Nenhum grupo encontrado</p>
+              <Icon name="groups" size={48} className="mx-auto mb-2 opacity-50" />
+              <p>{groups.length === 0 ? "Nenhum grupo disponível" : "Nenhum grupo encontrado"}</p>
             </div>
           ) : (
             filteredGroups.map((group) => (
               <GroupCard
                 key={group.id}
                 name={group.name}
-                description={group.description}
-                icon={group.icon}
-                isActive={group.isActive}
-                showBadge={group.id === 1}
-                onJoin={() => handleJoinGroup(group.name)}
+                description={group.description || ""}
+                icon="groups"
+                isActive
+                showBadge={false}
+                onJoin={() => handleJoinGroup(group.name, group.link)}
               />
             ))
           )}
