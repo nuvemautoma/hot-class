@@ -318,6 +318,12 @@ const Admin = () => {
   };
 
   const handleRemoveAdmin = async (userId: string) => {
+    // Only owner can remove admins
+    if (!isOwner) {
+      toast.error("Apenas o dono pode remover administradores");
+      return;
+    }
+
     const userProfile = users.find((u) => u.user_id === userId);
     if (!userProfile) return;
 
@@ -682,15 +688,17 @@ const Admin = () => {
                             <p className="font-medium text-sm">{admin.name}</p>
                             <p className="text-xs text-muted-foreground">{admin.email}</p>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveAdmin(admin.user_id)}
-                            className="text-destructive"
-                          >
-                            <Icon name="remove" size={16} className="mr-1" />
-                            Remover
-                          </Button>
+                          {isOwner && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveAdmin(admin.user_id)}
+                              className="text-destructive"
+                            >
+                              <Icon name="remove" size={16} className="mr-1" />
+                              Remover
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>
