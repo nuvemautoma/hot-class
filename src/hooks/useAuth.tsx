@@ -119,6 +119,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
+  // Listen to realtime changes in user_roles to auto-refresh admin status
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('user-roles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_roles',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Refresh admin status when roles change
+          if (profile) {
+            checkAdminStatus(user.id, profile.email);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, profile]);
+
   // Sign in
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
