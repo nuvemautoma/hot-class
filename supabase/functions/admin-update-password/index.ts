@@ -74,8 +74,33 @@ Deno.serve(async (req) => {
     }
 
     const trimmedPassword = newPassword.trim();
-    if (trimmedPassword.length < 8 || trimmedPassword.length > 72) {
-      return new Response(JSON.stringify({ error: "Password must be between 8 and 72 characters" }), {
+    
+    // Validate password: min 6 chars, 1 special char, 1 uppercase
+    if (trimmedPassword.length < 6) {
+      return new Response(JSON.stringify({ error: "A senha deve ter no mínimo 6 caracteres" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    if (trimmedPassword.length > 72) {
+      return new Response(JSON.stringify({ error: "A senha deve ter no máximo 72 caracteres" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    const hasUppercase = /[A-Z]/.test(trimmedPassword);
+    if (!hasUppercase) {
+      return new Response(JSON.stringify({ error: "A senha deve conter pelo menos uma letra maiúscula" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(trimmedPassword);
+    if (!hasSpecialChar) {
+      return new Response(JSON.stringify({ error: "A senha deve conter pelo menos um caractere especial" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

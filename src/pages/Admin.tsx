@@ -309,7 +309,10 @@ const Admin = () => {
     }
 
     await logAction("Adicionou admin", { email: newAdminEmail });
-    toast.success("Admin adicionado!");
+    toast.success("Admin adicionado! O usuário verá o painel admin automaticamente.", {
+      description: "Se o usuário estiver logado, a permissão será atualizada em tempo real.",
+      duration: 5000,
+    });
     setNewAdminEmail("");
     fetchUserRoles();
   };
