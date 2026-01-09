@@ -87,7 +87,6 @@
   html {
     @apply dark;
   }
-#lovable-badge { display: none !important; }
   
   body {
     @apply bg-background text-foreground font-display antialiased;
