@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
+import { TermsPopup } from "@/components/terms/TermsPopup";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Groups from "./pages/Groups";
@@ -25,6 +26,7 @@ const App = () => (
       <Sonner position="top-center" />
       <BrowserRouter>
         <AuthProvider>
+          <TermsPopup />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route

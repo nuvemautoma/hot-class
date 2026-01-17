@@ -3,15 +3,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
-interface HeaderProps {
-  showUserInfo?: boolean;
-  userName?: string;
-  userStatus?: string;
-}
-
-export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userStatus = "Acesso Total" }: HeaderProps) => {
+export const Header = () => {
   const location = useLocation();
-  const { isOwner, isAdmin } = useAuth();
+  const { isOwner, isAdmin, profile } = useAuth();
+  
+  const userName = profile?.name || "Usuário";
+  const userStatus = "Acesso Total";
   
   const navItems = [
     { path: "/", label: "Início", icon: "dashboard" },
@@ -59,12 +56,10 @@ export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userSta
         </h1>
 
         <div className="flex items-center gap-2">
-          {showUserInfo && (
-            <div className="hidden sm:flex flex-col items-end mr-1">
-              <span className="text-xs font-bold text-foreground">{userName}</span>
-              <span className="text-[10px] text-success font-medium uppercase tracking-wider">{userStatus}</span>
-            </div>
-          )}
+          <div className="hidden sm:flex flex-col items-end mr-1">
+            <span className="text-xs font-bold text-foreground">{userName}</span>
+            <span className="text-[10px] text-success font-medium uppercase tracking-wider">{userStatus}</span>
+          </div>
           <button className="size-9 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
             <Icon name="person" size={20} />
           </button>
