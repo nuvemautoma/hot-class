@@ -76,6 +76,8 @@ const Admin = () => {
   const [newAccount, setNewAccount] = useState({ name: "", email: "", password: "" });
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", password: "" });
+  const [disparadorLink, setDisparadorLink] = useState("");
+  const [disparadorLinkLoading, setDisparadorLinkLoading] = useState(false);
 
   // Dialogs
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
@@ -86,7 +88,10 @@ const Admin = () => {
 
   useEffect(() => {
     fetchAllData();
-  }, []);
+    if (isOwner) {
+      fetchDisparadorLink();
+    }
+  }, [isOwner]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -98,6 +103,58 @@ const Admin = () => {
       fetchLogs(),
     ]);
     setLoading(false);
+  };
+
+  const fetchDisparadorLink = async () => {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "disparador_link")
+      .maybeSingle();
+
+    if (!error && data) {
+      setDisparadorLink(data.value);
+    }
+  };
+
+  const handleUpdateDisparadorLink = async () => {
+    if (!disparadorLink.trim()) {
+      toast.error("Informe um link válido");
+      return;
+    }
+
+    setDisparadorLinkLoading(true);
+    
+    // Try to update first
+    const { data: existingData } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", "disparador_link")
+      .maybeSingle();
+
+    let error;
+    if (existingData) {
+      const result = await supabase
+        .from("app_settings")
+        .update({ value: disparadorLink.trim(), updated_at: new Date().toISOString() })
+        .eq("key", "disparador_link");
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("app_settings")
+        .insert({ key: "disparador_link", value: disparadorLink.trim() });
+      error = result.error;
+    }
+
+    setDisparadorLinkLoading(false);
+
+    if (error) {
+      toast.error("Erro ao salvar link: " + error.message);
+      return;
+    }
+
+    await logAction("Atualizou link do Disparador", { link: disparadorLink.trim() });
+    toast.success("Link do Disparador atualizado!");
   };
 
   const fetchUsers = async () => {
@@ -483,7 +540,7 @@ const Admin = () => {
 
       <main className="max-w-7xl mx-auto p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-6">
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-6' : 'grid-cols-5'} mb-6`}>
             <TabsTrigger value="accounts" className="flex items-center gap-1.5 text-xs">
               <Icon name="group" size={16} />
               <span className="hidden sm:inline">Contas</span>
@@ -504,6 +561,12 @@ const Admin = () => {
               <Icon name="history" size={16} />
               <span className="hidden sm:inline">Logs</span>
             </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="disparador" className="flex items-center gap-1.5 text-xs">
+                <Icon name="rocket_launch" size={16} />
+                <span className="hidden sm:inline">Disparador</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Accounts Tab */}
@@ -974,6 +1037,61 @@ const Admin = () => {
               </CardContent>
             </Card>
           </TabsContent>
+          {/* Disparador Tab - Owner Only */}
+          {isOwner && (
+            <TabsContent value="disparador">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Icon name="rocket_launch" size={20} className="text-primary" />
+                    Configuração do Disparador
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon name="info" size={18} className="text-primary" />
+                      <span className="text-sm font-medium text-primary">Apenas o Dono</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Apenas você pode editar o link do Disparador. Este link será usado para redirecionar os usuários quando clicarem em "Acessar Ferramenta" na página do Disparador.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Link do Disparador</Label>
+                    <Input
+                      value={disparadorLink}
+                      onChange={(e) => setDisparadorLink(e.target.value)}
+                      placeholder="https://..."
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Insira o link completo para onde os usuários serão redirecionados (ex: https://ferramenta.com/disparo)
+                    </p>
+                  </div>
+
+                  <Button 
+                    onClick={handleUpdateDisparadorLink} 
+                    disabled={disparadorLinkLoading}
+                    className="w-full"
+                  >
+                    {disparadorLinkLoading ? (
+                      <>
+                        <div className="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="save" size={16} className="mr-2" />
+                        Salvar Link
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>
