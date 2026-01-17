@@ -78,6 +78,8 @@ const Admin = () => {
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", password: "" });
   const [disparadorLink, setDisparadorLink] = useState("");
   const [disparadorLinkLoading, setDisparadorLinkLoading] = useState(false);
+  const [termsContent, setTermsContent] = useState("");
+  const [termsLoading, setTermsLoading] = useState(false);
 
   // Dialogs
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
@@ -90,6 +92,7 @@ const Admin = () => {
     fetchAllData();
     if (isOwner) {
       fetchDisparadorLink();
+      fetchTermsContent();
     }
   }, [isOwner]);
 
@@ -155,6 +158,58 @@ const Admin = () => {
 
     await logAction("Atualizou link do Disparador", { link: disparadorLink.trim() });
     toast.success("Link do Disparador atualizado!");
+  };
+
+  const fetchTermsContent = async () => {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "terms_content")
+      .maybeSingle();
+
+    if (!error && data) {
+      setTermsContent(data.value);
+    }
+  };
+
+  const handleUpdateTerms = async () => {
+    if (!termsContent.trim()) {
+      toast.error("Informe o conteúdo dos termos");
+      return;
+    }
+
+    setTermsLoading(true);
+    
+    // Try to update first
+    const { data: existingData } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", "terms_content")
+      .maybeSingle();
+
+    let error;
+    if (existingData) {
+      const result = await supabase
+        .from("app_settings")
+        .update({ value: termsContent.trim(), updated_at: new Date().toISOString() })
+        .eq("key", "terms_content");
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("app_settings")
+        .insert({ key: "terms_content", value: termsContent.trim() });
+      error = result.error;
+    }
+
+    setTermsLoading(false);
+
+    if (error) {
+      toast.error("Erro ao salvar termos: " + error.message);
+      return;
+    }
+
+    await logAction("Atualizou Termos de Uso");
+    toast.success("Termos de Uso atualizados!");
   };
 
   const fetchUsers = async () => {
@@ -540,7 +595,7 @@ const Admin = () => {
 
       <main className="max-w-7xl mx-auto p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-6' : 'grid-cols-5'} mb-6`}>
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-7' : 'grid-cols-5'} mb-6`}>
             <TabsTrigger value="accounts" className="flex items-center gap-1.5 text-xs">
               <Icon name="group" size={16} />
               <span className="hidden sm:inline">Contas</span>
@@ -562,10 +617,16 @@ const Admin = () => {
               <span className="hidden sm:inline">Logs</span>
             </TabsTrigger>
             {isOwner && (
-              <TabsTrigger value="disparador" className="flex items-center gap-1.5 text-xs">
-                <Icon name="rocket_launch" size={16} />
-                <span className="hidden sm:inline">Disparador</span>
-              </TabsTrigger>
+              <>
+                <TabsTrigger value="terms" className="flex items-center gap-1.5 text-xs">
+                  <Icon name="gavel" size={16} />
+                  <span className="hidden sm:inline">Termos</span>
+                </TabsTrigger>
+                <TabsTrigger value="disparador" className="flex items-center gap-1.5 text-xs">
+                  <Icon name="rocket_launch" size={16} />
+                  <span className="hidden sm:inline">Disparador</span>
+                </TabsTrigger>
+              </>
             )}
           </TabsList>
 
@@ -1037,6 +1098,63 @@ const Admin = () => {
               </CardContent>
             </Card>
           </TabsContent>
+          {/* Terms Tab - Owner Only */}
+          {isOwner && (
+            <TabsContent value="terms">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Icon name="gavel" size={20} className="text-primary" />
+                    Termos de Uso e Condições
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon name="info" size={18} className="text-primary" />
+                      <span className="text-sm font-medium text-primary">Popup de Termos</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Este texto será exibido em um popup para contas recém-criadas nos primeiros 3 dias. 
+                      O usuário deve aceitar os termos para continuar usando a plataforma.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Conteúdo dos Termos</Label>
+                    <Textarea
+                      value={termsContent}
+                      onChange={(e) => setTermsContent(e.target.value)}
+                      placeholder="Digite aqui os termos de uso e condições da plataforma..."
+                      className="min-h-[300px] text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Escreva de forma clara e objetiva os termos e condições de uso da plataforma Hotfy.
+                    </p>
+                  </div>
+
+                  <Button 
+                    onClick={handleUpdateTerms} 
+                    disabled={termsLoading}
+                    className="w-full"
+                  >
+                    {termsLoading ? (
+                      <>
+                        <div className="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="save" size={16} className="mr-2" />
+                        Salvar Termos
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {/* Disparador Tab - Owner Only */}
           {isOwner && (
             <TabsContent value="disparador">

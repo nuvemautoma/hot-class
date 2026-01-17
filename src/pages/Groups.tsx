@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { SupportButton } from "@/components/layout/SupportButton";
@@ -6,6 +6,7 @@ import { GroupCard } from "@/components/groups/GroupCard";
 import { Icon } from "@/components/ui/Icon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Group {
   id: string;
@@ -15,10 +16,27 @@ interface Group {
   created_at: string;
 }
 
+// Function to generate a seeded random number
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+// Function to shuffle array with seed
+const shuffleWithSeed = <T,>(array: T[], seed: number): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 const Groups = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     fetchGroups();
@@ -36,7 +54,35 @@ const Groups = () => {
     setLoading(false);
   };
 
-  const filteredGroups = groups.filter(
+  // Calculate which groups to show based on account age
+  const visibleGroups = useMemo(() => {
+    if (!profile || groups.length === 0) return groups;
+
+    const accountCreatedAt = new Date(profile.created_at);
+    const now = new Date();
+    const daysSinceCreation = Math.floor((now.getTime() - accountCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+
+    // After 6 days (on day 7+), show all groups
+    if (daysSinceCreation >= 6) {
+      return groups;
+    }
+
+    // Generate a seed based on user_id for consistent randomization
+    const userIdSeed = user?.id 
+      ? user.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+      : 0;
+
+    // Shuffle groups with user-specific seed
+    const shuffledGroups = shuffleWithSeed(groups, userIdSeed);
+
+    // During first 7 days, progressively unlock groups
+    // Day 0: 1 group, Day 1: 2 groups, ..., Day 6+: all groups
+    const groupsToShow = Math.min(daysSinceCreation + 1, shuffledGroups.length);
+    
+    return shuffledGroups.slice(0, groupsToShow);
+  }, [groups, profile, user]);
+
+  const filteredGroups = visibleGroups.filter(
     (group) =>
       group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (group.description || "").toLowerCase().includes(searchQuery.toLowerCase())
@@ -46,6 +92,27 @@ const Groups = () => {
     window.open(link, "_blank");
     toast.success(`Acessando ${groupName}...`);
   };
+
+  // Calculate remaining days info
+  const accountInfo = useMemo(() => {
+    if (!profile) return null;
+    
+    const accountCreatedAt = new Date(profile.created_at);
+    const now = new Date();
+    const daysSinceCreation = Math.floor((now.getTime() - accountCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysSinceCreation >= 6) return null;
+    
+    const daysRemaining = 6 - daysSinceCreation;
+    const totalGroups = groups.length;
+    const unlockedGroups = Math.min(daysSinceCreation + 1, totalGroups);
+    
+    return {
+      daysRemaining,
+      unlockedGroups,
+      totalGroups,
+    };
+  }, [profile, groups]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -62,6 +129,26 @@ const Groups = () => {
             Conecte-se com sua comunidade agora.
           </p>
         </header>
+
+        {/* Progressive Unlock Notice */}
+        {accountInfo && (
+          <div className="mb-4 p-4 rounded-xl bg-primary/10 border border-primary/20">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Icon name="lock_open" size={20} className="text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-foreground">
+                  Liberação Progressiva
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {accountInfo.unlockedGroups} de {accountInfo.totalGroups} grupos liberados • 
+                  Próximo em {accountInfo.daysRemaining > 0 ? `${accountInfo.daysRemaining} dia${accountInfo.daysRemaining > 1 ? 's' : ''}` : 'breve'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search */}
         <div className="mb-8 relative group">
