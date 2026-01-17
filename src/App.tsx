@@ -13,6 +13,7 @@ import Search from "./pages/Search";
 import Alerts from "./pages/Alerts";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
+import Disparador from "./pages/Disparador";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +73,14 @@ const App = () => (
                 <AdminRoute>
                   <Admin />
                 </AdminRoute>
+              }
+            />
+            <Route
+              path="/disparador"
+              element={
+                <ProtectedRoute>
+                  <Disparador />
+                </ProtectedRoute>
               }
             />
             <Route path="*" element={<NotFound />} />

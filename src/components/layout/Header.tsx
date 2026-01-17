@@ -16,7 +16,7 @@ export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userSta
   const navItems = [
     { path: "/", label: "Início", icon: "dashboard" },
     { path: "/grupos", label: "Meus Grupos", icon: "groups" },
-    { path: "/buscar", label: "Buscar", icon: "search" },
+    { path: "/disparador", label: "Disparador", icon: "rocket_launch" },
     { path: "/alertas", label: "Alertas", icon: "notifications" },
     { path: "/ajustes", label: "Ajustes", icon: "settings" },
     ...((isOwner || isAdmin) ? [{ path: "/admin", label: "Admin", icon: "admin_panel_settings" }] : []),
@@ -33,7 +33,7 @@ export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userSta
           </SheetTrigger>
           <SheetContent side="left" className="bg-card border-border">
             <SheetHeader>
-              <SheetTitle className="text-primary font-bold">Hot Class</SheetTitle>
+              <SheetTitle className="text-primary font-bold">Hotfy</SheetTitle>
             </SheetHeader>
             <div className="mt-6 flex flex-col gap-2">
               {navItems.map((item) => (
@@ -55,7 +55,7 @@ export const Header = ({ showUserInfo = true, userName = "Marcos Silva", userSta
         </Sheet>
 
         <h1 className="text-base font-bold tracking-wide uppercase text-primary">
-          Hot<span className="text-foreground">Class</span>
+          Hot<span className="text-foreground">fy</span>
         </h1>
 
         <div className="flex items-center gap-2">

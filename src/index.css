@@ -15,28 +15,28 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 347 84% 45%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 120 100% 50%;
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 350 20% 15%;
+    --secondary: 120 20% 15%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 350 10% 90%;
-    --muted-foreground: 350 5% 45%;
+    --muted: 120 10% 90%;
+    --muted-foreground: 120 5% 45%;
 
-    --accent: 350 20% 92%;
-    --accent-foreground: 347 84% 45%;
+    --accent: 120 20% 92%;
+    --accent-foreground: 120 100% 50%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 350 10% 88%;
-    --input: 350 10% 88%;
-    --ring: 347 84% 45%;
+    --border: 120 10% 88%;
+    --input: 120 10% 88%;
+    --ring: 120 100% 50%;
 
     --radius: 0.75rem;
 
-    --surface: 350 15% 18%;
+    --surface: 120 15% 18%;
     --surface-foreground: 0 0% 100%;
     
     --success: 142 76% 36%;
@@ -44,38 +44,38 @@
   }
 
   .dark {
-    --background: 350 47% 7%;
+    --background: 0 0% 0%;
     --foreground: 0 0% 95%;
 
-    --card: 350 30% 11%;
+    --card: 0 0% 4%;
     --card-foreground: 0 0% 95%;
 
-    --popover: 350 30% 11%;
+    --popover: 0 0% 4%;
     --popover-foreground: 0 0% 95%;
 
-    --primary: 347 84% 48%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 120 100% 50%;
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 350 25% 16%;
+    --secondary: 120 25% 10%;
     --secondary-foreground: 0 0% 95%;
 
-    --muted: 350 20% 14%;
-    --muted-foreground: 350 10% 55%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 350 25% 16%;
-    --accent-foreground: 347 84% 55%;
+    --accent: 120 25% 10%;
+    --accent-foreground: 120 100% 50%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 95%;
 
-    --border: 350 15% 15%;
-    --input: 350 20% 18%;
-    --ring: 347 84% 48%;
+    --border: 0 0% 12%;
+    --input: 0 0% 12%;
+    --ring: 120 100% 50%;
 
-    --surface: 350 25% 14%;
+    --surface: 0 0% 8%;
     --surface-foreground: 0 0% 95%;
     
-    --nav-background: 350 40% 5%;
+    --nav-background: 0 0% 2%;
   }
 }
 
