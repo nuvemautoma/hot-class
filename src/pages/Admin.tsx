@@ -62,11 +62,13 @@ const Admin = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [userIPCounts, setUserIPCounts] = useState<IPCount[]>([]);
+  const [userGroupUnlocks, setUserGroupUnlocks] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [logs, setLogs] = useState<AdminLog[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [unlockingUserId, setUnlockingUserId] = useState<string | null>(null);
 
   // Form states
   const [newAdminEmail, setNewAdminEmail] = useState("");
@@ -107,6 +109,7 @@ const Admin = () => {
       fetchGroups(),
       fetchNotifications(),
       fetchLogs(),
+      fetchUserGroupUnlocks(),
     ]);
     setLoading(false);
   };
@@ -262,6 +265,63 @@ const Admin = () => {
 
     await logAction("Atualizou Termos de Uso");
     toast.success("Termos de Uso atualizados!");
+  };
+
+  const fetchUserGroupUnlocks = async () => {
+    const { data, error } = await supabase
+      .from("user_group_unlocks")
+      .select("user_id");
+    
+    if (!error && data) {
+      setUserGroupUnlocks(data.map(d => d.user_id));
+    }
+  };
+
+  const isUserGroupsUnlocked = (userId: string): boolean => {
+    return userGroupUnlocks.includes(userId);
+  };
+
+  const handleToggleUserGroupUnlock = async (userProfile: UserProfile) => {
+    if (!user) return;
+    
+    setUnlockingUserId(userProfile.user_id);
+    const isCurrentlyUnlocked = isUserGroupsUnlocked(userProfile.user_id);
+
+    let error;
+    if (isCurrentlyUnlocked) {
+      // Remove unlock
+      const result = await supabase
+        .from("user_group_unlocks")
+        .delete()
+        .eq("user_id", userProfile.user_id);
+      error = result.error;
+    } else {
+      // Add unlock
+      const result = await supabase
+        .from("user_group_unlocks")
+        .insert({ user_id: userProfile.user_id, unlocked_by: user.id });
+      error = result.error;
+    }
+
+    setUnlockingUserId(null);
+
+    if (error) {
+      toast.error("Erro ao atualizar liberação: " + error.message);
+      return;
+    }
+
+    await logAction(
+      isCurrentlyUnlocked ? "Revogou liberação de grupos" : "Liberou todos os grupos",
+      { email: userProfile.email, name: userProfile.name }
+    );
+    
+    toast.success(
+      isCurrentlyUnlocked 
+        ? `Liberação revogada para ${userProfile.name || userProfile.email}` 
+        : `Todos os grupos liberados para ${userProfile.name || userProfile.email}!`
+    );
+    
+    fetchUserGroupUnlocks();
   };
 
   const fetchUsers = async () => {
@@ -758,10 +818,31 @@ const Admin = () => {
                             <span className="text-[10px] text-muted-foreground">
                               IPs: {getIPCount(userProfile.user_id)}
                             </span>
+                            {isUserGroupsUnlocked(userProfile.user_id) && (
+                              <Badge variant="default" className="text-[10px] bg-primary/80">
+                                <Icon name="lock_open" size={10} className="mr-0.5" />
+                                Grupos Liberados
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         {userProfile.email !== "hotclass@dono.com" && (
                           <div className="flex items-center gap-1">
+                            {isOwner && (
+                              <Button
+                                variant={isUserGroupsUnlocked(userProfile.user_id) ? "secondary" : "outline"}
+                                size="icon"
+                                onClick={() => handleToggleUserGroupUnlock(userProfile)}
+                                disabled={unlockingUserId === userProfile.user_id}
+                                title={isUserGroupsUnlocked(userProfile.user_id) ? "Revogar liberação de grupos" : "Liberar todos os grupos"}
+                              >
+                                {unlockingUserId === userProfile.user_id ? (
+                                  <div className="size-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Icon name={isUserGroupsUnlocked(userProfile.user_id) ? "lock" : "lock_open"} size={16} />
+                                )}
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"

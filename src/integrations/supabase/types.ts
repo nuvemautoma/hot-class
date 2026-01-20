@@ -224,6 +224,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_group_unlocks: {
+        Row: {
+          id: string
+          unlocked_at: string
+          unlocked_by: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          unlocked_at?: string
+          unlocked_by: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          unlocked_at?: string
+          unlocked_by?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
