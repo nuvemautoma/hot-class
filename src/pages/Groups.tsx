@@ -36,10 +36,12 @@ const Groups = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unlockAllGroups, setUnlockAllGroups] = useState(false);
   const { user, profile } = useAuth();
 
   useEffect(() => {
     fetchGroups();
+    fetchUnlockSetting();
   }, []);
 
   const fetchGroups = async () => {
@@ -54,9 +56,26 @@ const Groups = () => {
     setLoading(false);
   };
 
+  const fetchUnlockSetting = async () => {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "unlock_all_groups")
+      .maybeSingle();
+
+    if (!error && data) {
+      setUnlockAllGroups(data.value === "true");
+    }
+  };
+
   // Calculate which groups to show based on account age
   const visibleGroups = useMemo(() => {
     if (!profile || groups.length === 0) return groups;
+
+    // If admin enabled unlock all groups, show all
+    if (unlockAllGroups) {
+      return groups;
+    }
 
     const accountCreatedAt = new Date(profile.created_at);
     const now = new Date();
@@ -80,7 +99,7 @@ const Groups = () => {
     const groupsToShow = Math.min(daysSinceCreation + 1, shuffledGroups.length);
     
     return shuffledGroups.slice(0, groupsToShow);
-  }, [groups, profile, user]);
+  }, [groups, profile, user, unlockAllGroups]);
 
   const filteredGroups = visibleGroups.filter(
     (group) =>
@@ -97,6 +116,9 @@ const Groups = () => {
   const accountInfo = useMemo(() => {
     if (!profile) return null;
     
+    // If unlock all groups is enabled, don't show the notice
+    if (unlockAllGroups) return null;
+    
     const accountCreatedAt = new Date(profile.created_at);
     const now = new Date();
     const daysSinceCreation = Math.floor((now.getTime() - accountCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
@@ -112,7 +134,7 @@ const Groups = () => {
       unlockedGroups,
       totalGroups,
     };
-  }, [profile, groups]);
+  }, [profile, groups, unlockAllGroups]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

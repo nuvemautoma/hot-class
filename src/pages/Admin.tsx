@@ -80,6 +80,8 @@ const Admin = () => {
   const [disparadorLinkLoading, setDisparadorLinkLoading] = useState(false);
   const [termsContent, setTermsContent] = useState("");
   const [termsLoading, setTermsLoading] = useState(false);
+  const [unlockAllGroups, setUnlockAllGroups] = useState(false);
+  const [unlockAllGroupsLoading, setUnlockAllGroupsLoading] = useState(false);
 
   // Dialogs
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
@@ -93,6 +95,7 @@ const Admin = () => {
     if (isOwner) {
       fetchDisparadorLink();
       fetchTermsContent();
+      fetchUnlockAllGroups();
     }
   }, [isOwner]);
 
@@ -170,6 +173,55 @@ const Admin = () => {
     if (!error && data) {
       setTermsContent(data.value);
     }
+  };
+
+  const fetchUnlockAllGroups = async () => {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "unlock_all_groups")
+      .maybeSingle();
+
+    if (!error && data) {
+      setUnlockAllGroups(data.value === "true");
+    }
+  };
+
+  const handleToggleUnlockAllGroups = async () => {
+    setUnlockAllGroupsLoading(true);
+    const newValue = !unlockAllGroups;
+    
+    // Try to update first
+    const { data: existingData } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", "unlock_all_groups")
+      .maybeSingle();
+
+    let error;
+    if (existingData) {
+      const result = await supabase
+        .from("app_settings")
+        .update({ value: newValue ? "true" : "false", updated_at: new Date().toISOString() })
+        .eq("key", "unlock_all_groups");
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("app_settings")
+        .insert({ key: "unlock_all_groups", value: newValue ? "true" : "false" });
+      error = result.error;
+    }
+
+    setUnlockAllGroupsLoading(false);
+
+    if (error) {
+      toast.error("Erro ao atualizar configuração: " + error.message);
+      return;
+    }
+
+    setUnlockAllGroups(newValue);
+    await logAction(newValue ? "Liberou todos os grupos para todos os usuários" : "Desativou liberação de todos os grupos");
+    toast.success(newValue ? "Todos os grupos foram liberados!" : "Liberação de grupos desativada!");
   };
 
   const handleUpdateTerms = async () => {
@@ -881,6 +933,49 @@ const Admin = () => {
                 </Dialog>
               </CardHeader>
               <CardContent>
+                {/* Unlock All Groups Button - Owner Only */}
+                {isOwner && (
+                  <div className="mb-4 p-4 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                          <Icon name="lock_open" size={20} className="text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-foreground">
+                            Liberação Global de Grupos
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {unlockAllGroups 
+                              ? "Todos os usuários podem ver todos os grupos" 
+                              : "Grupos são liberados progressivamente (7 dias)"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleToggleUnlockAllGroups}
+                        disabled={unlockAllGroupsLoading}
+                        variant={unlockAllGroups ? "destructive" : "default"}
+                        size="sm"
+                      >
+                        {unlockAllGroupsLoading ? (
+                          <div className="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                        ) : unlockAllGroups ? (
+                          <>
+                            <Icon name="lock" size={16} className="mr-1" />
+                            Desativar
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="lock_open" size={16} className="mr-1" />
+                            Liberar Todos
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {groups.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">Nenhum grupo cadastrado</p>
                 ) : (
