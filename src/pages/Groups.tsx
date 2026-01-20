@@ -37,12 +37,19 @@ const Groups = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [unlockAllGroups, setUnlockAllGroups] = useState(false);
+  const [userUnlocked, setUserUnlocked] = useState(false);
   const { user, profile } = useAuth();
 
   useEffect(() => {
     fetchGroups();
     fetchUnlockSetting();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserUnlock();
+    }
+  }, [user]);
 
   const fetchGroups = async () => {
     const { data, error } = await supabase
@@ -68,12 +75,26 @@ const Groups = () => {
     }
   };
 
+  const fetchUserUnlock = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from("user_group_unlocks")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!error && data) {
+      setUserUnlocked(true);
+    }
+  };
+
   // Calculate which groups to show based on account age
   const visibleGroups = useMemo(() => {
     if (!profile || groups.length === 0) return groups;
 
-    // If admin enabled unlock all groups, show all
-    if (unlockAllGroups) {
+    // If admin enabled unlock all groups OR user is individually unlocked, show all
+    if (unlockAllGroups || userUnlocked) {
       return groups;
     }
 
@@ -99,7 +120,7 @@ const Groups = () => {
     const groupsToShow = Math.min(daysSinceCreation + 1, shuffledGroups.length);
     
     return shuffledGroups.slice(0, groupsToShow);
-  }, [groups, profile, user, unlockAllGroups]);
+  }, [groups, profile, user, unlockAllGroups, userUnlocked]);
 
   const filteredGroups = visibleGroups.filter(
     (group) =>
@@ -116,8 +137,8 @@ const Groups = () => {
   const accountInfo = useMemo(() => {
     if (!profile) return null;
     
-    // If unlock all groups is enabled, don't show the notice
-    if (unlockAllGroups) return null;
+    // If unlock all groups is enabled or user is individually unlocked, don't show the notice
+    if (unlockAllGroups || userUnlocked) return null;
     
     const accountCreatedAt = new Date(profile.created_at);
     const now = new Date();
@@ -134,7 +155,7 @@ const Groups = () => {
       unlockedGroups,
       totalGroups,
     };
-  }, [profile, groups, unlockAllGroups]);
+  }, [profile, groups, unlockAllGroups, userUnlocked]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
