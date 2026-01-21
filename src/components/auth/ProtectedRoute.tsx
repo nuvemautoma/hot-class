@@ -1,13 +1,17 @@
 import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { usePlanValidation } from "@/hooks/usePlanValidation";
 
 interface ProtectedRouteProps {
   children: ReactNode;
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading, isOwner, isAdmin } = useAuth();
+  const { loading: planLoading, isValid, isExpired } = usePlanValidation();
+
+  const loading = authLoading || planLoading;
 
   if (loading) {
     return (
@@ -22,6 +26,20 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Owner and admins bypass plan validation
+  if (isOwner || isAdmin) {
+    return <>{children}</>;
+  }
+
+  // Check if user has valid plan
+  if (!isValid) {
+    if (isExpired) {
+      return <Navigate to="/renovar" replace />;
+    }
+    // No plan at all - redirect to renewal page
+    return <Navigate to="/renovar" replace />;
   }
 
   return <>{children}</>;

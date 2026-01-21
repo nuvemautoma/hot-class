@@ -9,6 +9,7 @@ import { AdminRoute } from "@/components/auth/AdminRoute";
 import { TermsPopup } from "@/components/terms/TermsPopup";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
+import Renewal from "./pages/Renewal";
 import Groups from "./pages/Groups";
 import Search from "./pages/Search";
 import Alerts from "./pages/Alerts";
@@ -29,6 +30,7 @@ const App = () => (
           <TermsPopup />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/renovar" element={<Renewal />} />
             <Route
               path="/"
               element={
