@@ -2,8 +2,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
 };
+
+// Cakto webhook secret for validation
+const CAKTO_WEBHOOK_SECRET = Deno.env.get("CAKTO_WEBHOOK_SECRET");
 
 interface CaktoPayload {
   // Cakto webhook payload fields
@@ -20,6 +23,9 @@ interface CaktoPayload {
   // Event types from Cakto
   type?: string;
   action?: string;
+  // Cakto may send secret in payload
+  webhook_secret?: string;
+  secret?: string;
 }
 
 // Event types that should delete the user
@@ -124,6 +130,22 @@ Deno.serve(async (req) => {
     const payload: CaktoPayload = await req.json();
     
     console.log("Received Cakto webhook payload:", JSON.stringify(payload, null, 2));
+
+    // Validate webhook secret
+    // Cakto may send the secret in headers or in payload
+    const headerSecret = req.headers.get("x-webhook-secret") || req.headers.get("x-cakto-secret");
+    const payloadSecret = payload.webhook_secret || payload.secret;
+    const receivedSecret = headerSecret || payloadSecret;
+
+    if (CAKTO_WEBHOOK_SECRET && receivedSecret !== CAKTO_WEBHOOK_SECRET) {
+      console.error("Invalid webhook secret");
+      return new Response(JSON.stringify({ error: "Unauthorized - Invalid webhook secret" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log("Webhook secret validated successfully");
 
     // Extract email from various possible field names
     const email = payload.email || payload.buyer_email || payload.customer_email;
