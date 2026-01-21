@@ -1,7 +1,7 @@
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { SupportButton } from "@/components/layout/SupportButton";
-import { LifetimeStatusCard } from "@/components/dashboard/LifetimeStatusCard";
+import { AccountStatusCard } from "@/components/dashboard/AccountStatusCard";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Icon } from "@/components/ui/Icon";
 import { useNavigate } from "react-router-dom";
@@ -43,7 +43,7 @@ const Dashboard = () => {
 
         {/* Status Card */}
         <div className="px-4 mb-6">
-          <LifetimeStatusCard />
+          <AccountStatusCard />
         </div>
 
         {/* Quick Stats */}

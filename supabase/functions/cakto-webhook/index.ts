@@ -17,7 +17,37 @@ interface CaktoPayload {
   sale_id?: string;
   status?: string;
   event?: string;
+  // Event types from Cakto
+  type?: string;
+  action?: string;
 }
+
+// Event types that should delete the user
+const DELETE_EVENTS = [
+  'refund',
+  'refunded',
+  'reembolso',
+  'chargeback',
+  'subscription_cancelled',
+  'subscription_canceled',
+  'assinatura_cancelada',
+  'payment_failed',
+  'pagamento_falhou',
+  'cancelled',
+  'canceled',
+  'cancelado',
+];
+
+// Event types that should create/update the user
+const APPROVED_EVENTS = [
+  'approved',
+  'paid',
+  'payment_approved',
+  'pagamento_aprovado',
+  'aprovado',
+  'completed',
+  'success',
+];
 
 // Map product names/IDs to plan types
 function getPlanType(productName: string | undefined, productId: string | undefined): 'mensal' | 'trimestral' | 'vitalicio' {
@@ -55,6 +85,27 @@ function getExpirationDate(planType: 'mensal' | 'trimestral' | 'vitalicio'): Dat
   return now;
 }
 
+// Determine the event type from payload
+function getEventType(payload: CaktoPayload): 'create' | 'delete' | 'unknown' {
+  const event = (payload.event || payload.type || payload.action || payload.status || '').toLowerCase();
+  
+  console.log(`Detecting event type from: "${event}"`);
+  
+  // Check if it's a delete event
+  if (DELETE_EVENTS.some(e => event.includes(e))) {
+    return 'delete';
+  }
+  
+  // Check if it's a create/update event
+  if (APPROVED_EVENTS.some(e => event.includes(e))) {
+    return 'create';
+  }
+  
+  // Default: treat as create for backward compatibility
+  console.log('Event type unknown, defaulting to create');
+  return 'create';
+}
+
 Deno.serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
@@ -88,13 +139,10 @@ Deno.serve(async (req) => {
     // Normalize email
     const normalizedEmail = email.toLowerCase().trim();
     
-    // Get product info for plan type
-    const productName = payload.product_name || payload.offer_name;
-    const productId = payload.product_id;
-    const planType = getPlanType(productName, productId);
-    const expirationDate = getExpirationDate(planType);
+    // Determine event type
+    const eventType = getEventType(payload);
     
-    console.log(`Processing: email=${normalizedEmail}, plan=${planType}, expires=${expirationDate}`);
+    console.log(`Processing event: ${eventType} for email: ${normalizedEmail}`);
 
     // Initialize Supabase admin client
     const supabaseAdmin = createClient(
@@ -108,11 +156,103 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Check if user already exists
+    // Find existing user
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
       (u) => u.email?.toLowerCase() === normalizedEmail
     );
+
+    // Handle DELETE events (refund, cancellation, payment failed)
+    if (eventType === 'delete') {
+      if (!existingUser) {
+        console.log(`User not found for deletion: ${normalizedEmail}`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "User not found, nothing to delete",
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const userId = existingUser.id;
+      console.log(`Deleting user: ${userId} (${normalizedEmail})`);
+
+      // Delete user plan first
+      const { error: planDeleteError } = await supabaseAdmin
+        .from("user_plans")
+        .delete()
+        .eq("user_id", userId);
+
+      if (planDeleteError) {
+        console.error("Error deleting user plan:", planDeleteError);
+      }
+
+      // Delete profile
+      const { error: profileDeleteError } = await supabaseAdmin
+        .from("profiles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (profileDeleteError) {
+        console.error("Error deleting profile:", profileDeleteError);
+      }
+
+      // Delete authorized IPs
+      const { error: ipsDeleteError } = await supabaseAdmin
+        .from("authorized_ips")
+        .delete()
+        .eq("user_id", userId);
+
+      if (ipsDeleteError) {
+        console.error("Error deleting authorized IPs:", ipsDeleteError);
+      }
+
+      // Delete user roles
+      const { error: rolesDeleteError } = await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (rolesDeleteError) {
+        console.error("Error deleting user roles:", rolesDeleteError);
+      }
+
+      // Finally delete the auth user
+      const { error: userDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+
+      if (userDeleteError) {
+        console.error("Error deleting auth user:", userDeleteError);
+        throw userDeleteError;
+      }
+
+      console.log(`User completely deleted: ${userId}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "User deleted successfully",
+          user_id: userId,
+          event: eventType,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Handle CREATE events (payment approved)
+    // Get product info for plan type
+    const productName = payload.product_name || payload.offer_name;
+    const productId = payload.product_id;
+    const planType = getPlanType(productName, productId);
+    const expirationDate = getExpirationDate(planType);
+    
+    console.log(`Creating/updating: email=${normalizedEmail}, plan=${planType}, expires=${expirationDate}`);
 
     let userId: string;
 
@@ -190,6 +330,7 @@ Deno.serve(async (req) => {
         user_id: userId,
         plan_type: planType,
         expires_at: expirationDate?.toISOString() || null,
+        event: eventType,
       }),
       {
         status: 200,
