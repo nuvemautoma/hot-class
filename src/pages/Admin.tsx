@@ -392,18 +392,30 @@ const Admin = () => {
       return;
     }
 
-    // Use signUp instead of admin API (admin API requires service role key which is not available in client)
-    const { error } = await supabase.auth.signUp({
-      email: newAccount.email,
-      password: newAccount.password,
-      options: {
-        data: { name: newAccount.name },
-        emailRedirectTo: `${window.location.origin}/`,
-      }
+    if (!session?.access_token) {
+      toast.error("Sessão inválida. Faça login novamente.");
+      return;
+    }
+
+    const { data, error } = await supabase.functions.invoke("admin-manage-user", {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: {
+        action: "create",
+        email: newAccount.email,
+        password: newAccount.password,
+        name: newAccount.name,
+      },
     });
 
     if (error) {
       toast.error("Erro ao criar conta: " + error.message);
+      return;
+    }
+
+    if (data?.error) {
+      toast.error("Erro ao criar conta: " + data.error);
       return;
     }
 
@@ -486,15 +498,33 @@ const Admin = () => {
     const confirmed = window.confirm(`Tem certeza que deseja excluir a conta de ${userProfile.email}?`);
     if (!confirmed) return;
 
-    // Delete profile (user will remain in auth but won't have app access)
-    const { error } = await supabase.from("profiles").delete().eq("user_id", userProfile.user_id);
+    if (!session?.access_token) {
+      toast.error("Sessão inválida. Faça login novamente.");
+      return;
+    }
+
+    const { data, error } = await supabase.functions.invoke("admin-manage-user", {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: {
+        action: "delete",
+        userId: userProfile.user_id,
+      },
+    });
+
     if (error) {
       toast.error("Erro ao excluir: " + error.message);
       return;
     }
 
+    if (data?.error) {
+      toast.error("Erro ao excluir: " + data.error);
+      return;
+    }
+
     await logAction("Excluiu conta", { email: userProfile.email });
-    toast.success("Conta excluída!");
+    toast.success("Conta excluída completamente!");
     fetchUsers();
   };
 

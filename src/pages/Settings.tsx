@@ -95,9 +95,15 @@ const Settings = () => {
   }, []);
 
   const handleLogout = async () => {
-    await signOut();
-    toast.success("Logout realizado!");
-    navigate("/login");
+    try {
+      await signOut();
+      toast.success("Logout realizado!");
+      // Force navigation after signOut completes
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Erro ao sair da conta");
+    }
   };
 
   const openSupport = () => {
