@@ -2,30 +2,35 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret, x-cakto-secret",
 };
 
 // Cakto webhook secret for validation
 const CAKTO_WEBHOOK_SECRET = Deno.env.get("CAKTO_WEBHOOK_SECRET");
 
 interface CaktoPayload {
-  // Cakto webhook payload fields
+  // Cakto webhook payload fields - all possible email fields
   email?: string;
   buyer_email?: string;
   customer_email?: string;
+  cliente_email?: string;
+  // Product info (not used anymore, always vitalicio)
   product_name?: string;
   product_id?: string;
   offer_name?: string;
+  // Transaction info
   transaction_id?: string;
   sale_id?: string;
+  // Event info
   status?: string;
   event?: string;
-  // Event types from Cakto
   type?: string;
   action?: string;
-  // Cakto may send secret in payload
+  // Secret fields
   webhook_secret?: string;
   secret?: string;
+  // Any other fields
+  [key: string]: unknown;
 }
 
 // Event types that should delete the user
@@ -42,6 +47,8 @@ const DELETE_EVENTS = [
   'cancelled',
   'canceled',
   'cancelado',
+  'expired',
+  'expirado',
 ];
 
 // Event types that should create/update the user
@@ -53,73 +60,78 @@ const APPROVED_EVENTS = [
   'aprovado',
   'completed',
   'success',
+  'active',
+  'ativo',
+  'confirmed',
+  'confirmado',
 ];
-
-// Map product names/IDs to plan types
-function getPlanType(productName: string | undefined, productId: string | undefined): 'mensal' | 'trimestral' | 'vitalicio' {
-  const name = (productName || '').toLowerCase();
-  const id = (productId || '').toLowerCase();
-  
-  // Check for plan keywords in product name or ID
-  if (name.includes('mensal') || name.includes('monthly') || id.includes('mensal')) {
-    return 'mensal';
-  }
-  if (name.includes('trimestral') || name.includes('quarterly') || name.includes('3 meses') || id.includes('trimestral')) {
-    return 'trimestral';
-  }
-  if (name.includes('vitalicio') || name.includes('vitalício') || name.includes('lifetime') || name.includes('anual') || id.includes('vitalicio')) {
-    return 'vitalicio';
-  }
-  
-  // Default to mensal if no match
-  return 'mensal';
-}
-
-// Calculate expiration date based on plan type
-function getExpirationDate(planType: 'mensal' | 'trimestral' | 'vitalicio'): Date | null {
-  if (planType === 'vitalicio') {
-    return null;
-  }
-  
-  const now = new Date();
-  if (planType === 'mensal') {
-    now.setDate(now.getDate() + 30);
-  } else if (planType === 'trimestral') {
-    now.setDate(now.getDate() + 90);
-  }
-  
-  return now;
-}
 
 // Determine the event type from payload
 function getEventType(payload: CaktoPayload): 'create' | 'delete' | 'unknown' {
-  const event = (payload.event || payload.type || payload.action || payload.status || '').toLowerCase();
+  const event = (payload.event || payload.type || payload.action || payload.status || '').toLowerCase().trim();
   
-  console.log(`Detecting event type from: "${event}"`);
+  console.log(`[CAKTO] Raw event value: "${event}"`);
+  console.log(`[CAKTO] Checking against DELETE_EVENTS: ${DELETE_EVENTS.join(', ')}`);
+  console.log(`[CAKTO] Checking against APPROVED_EVENTS: ${APPROVED_EVENTS.join(', ')}`);
   
   // Check if it's a delete event
-  if (DELETE_EVENTS.some(e => event.includes(e))) {
-    return 'delete';
+  for (const deleteEvent of DELETE_EVENTS) {
+    if (event.includes(deleteEvent)) {
+      console.log(`[CAKTO] Matched DELETE event: ${deleteEvent}`);
+      return 'delete';
+    }
   }
   
   // Check if it's a create/update event
-  if (APPROVED_EVENTS.some(e => event.includes(e))) {
-    return 'create';
+  for (const approvedEvent of APPROVED_EVENTS) {
+    if (event.includes(approvedEvent)) {
+      console.log(`[CAKTO] Matched APPROVED event: ${approvedEvent}`);
+      return 'create';
+    }
   }
   
-  // Default: treat as create for backward compatibility
-  console.log('Event type unknown, defaulting to create');
+  // Default: treat as create for new purchases (most webhooks are for approved purchases)
+  console.log('[CAKTO] Event type unknown, defaulting to CREATE (assuming approved purchase)');
   return 'create';
 }
 
+// Extract email from various possible fields
+function extractEmail(payload: CaktoPayload): string | null {
+  const possibleFields = ['email', 'buyer_email', 'customer_email', 'cliente_email'];
+  
+  for (const field of possibleFields) {
+    const value = payload[field];
+    if (typeof value === 'string' && value.includes('@')) {
+      console.log(`[CAKTO] Found email in field "${field}": ${value}`);
+      return value.toLowerCase().trim();
+    }
+  }
+  
+  // Try to find email in any field
+  for (const [key, value] of Object.entries(payload)) {
+    if (typeof value === 'string' && value.includes('@') && value.includes('.')) {
+      console.log(`[CAKTO] Found email in unexpected field "${key}": ${value}`);
+      return value.toLowerCase().trim();
+    }
+  }
+  
+  return null;
+}
+
 Deno.serve(async (req) => {
+  console.log('[CAKTO] ========== WEBHOOK RECEIVED ==========');
+  console.log(`[CAKTO] Method: ${req.method}`);
+  console.log(`[CAKTO] URL: ${req.url}`);
+  
   // Handle CORS
   if (req.method === "OPTIONS") {
+    console.log('[CAKTO] Handling CORS preflight');
     return new Response(null, { headers: corsHeaders });
   }
 
   // Only accept POST
   if (req.method !== "POST") {
+    console.log(`[CAKTO] ERROR: Method ${req.method} not allowed`);
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -127,67 +139,102 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const payload: CaktoPayload = await req.json();
-    
-    console.log("Received Cakto webhook payload:", JSON.stringify(payload, null, 2));
-
-    // Validate webhook secret
-    // Cakto may send the secret in headers or in payload
-    const headerSecret = req.headers.get("x-webhook-secret") || req.headers.get("x-cakto-secret");
-    const payloadSecret = payload.webhook_secret || payload.secret;
-    const receivedSecret = headerSecret || payloadSecret;
-
-    if (CAKTO_WEBHOOK_SECRET && receivedSecret !== CAKTO_WEBHOOK_SECRET) {
-      console.error("Invalid webhook secret");
-      return new Response(JSON.stringify({ error: "Unauthorized - Invalid webhook secret" }), {
-        status: 401,
+    // Parse payload
+    let payload: CaktoPayload;
+    try {
+      const rawBody = await req.text();
+      console.log(`[CAKTO] Raw body received: ${rawBody.substring(0, 500)}${rawBody.length > 500 ? '...' : ''}`);
+      payload = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('[CAKTO] ERROR: Failed to parse JSON body:', parseError);
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    
+    console.log("[CAKTO] Parsed payload:", JSON.stringify(payload, null, 2));
 
-    console.log("Webhook secret validated successfully");
+    // Validate webhook secret if configured
+    if (CAKTO_WEBHOOK_SECRET) {
+      const headerSecret = req.headers.get("x-webhook-secret") || req.headers.get("x-cakto-secret");
+      const payloadSecret = payload.webhook_secret || payload.secret;
+      const receivedSecret = headerSecret || payloadSecret;
 
-    // Extract email from various possible field names
-    const email = payload.email || payload.buyer_email || payload.customer_email;
+      console.log(`[CAKTO] Secret configured: YES`);
+      console.log(`[CAKTO] Header secret received: ${headerSecret ? 'YES' : 'NO'}`);
+      console.log(`[CAKTO] Payload secret received: ${payloadSecret ? 'YES' : 'NO'}`);
+
+      if (receivedSecret !== CAKTO_WEBHOOK_SECRET) {
+        console.error("[CAKTO] ERROR: Invalid webhook secret!");
+        console.error(`[CAKTO] Expected: ${CAKTO_WEBHOOK_SECRET.substring(0, 8)}...`);
+        console.error(`[CAKTO] Received: ${receivedSecret ? receivedSecret.substring(0, 8) + '...' : 'NONE'}`);
+        return new Response(JSON.stringify({ error: "Unauthorized - Invalid webhook secret" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.log("[CAKTO] Webhook secret validated successfully ✓");
+    } else {
+      console.log("[CAKTO] WARNING: No webhook secret configured, accepting all requests");
+    }
+
+    // Extract email
+    const email = extractEmail(payload);
     
     if (!email) {
-      console.error("No email found in payload");
-      return new Response(JSON.stringify({ error: "Email is required" }), {
+      console.error("[CAKTO] ERROR: No email found in payload!");
+      console.error("[CAKTO] Payload keys:", Object.keys(payload));
+      return new Response(JSON.stringify({ error: "Email is required - no email found in payload" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Normalize email
-    const normalizedEmail = email.toLowerCase().trim();
+    console.log(`[CAKTO] Email extracted: ${email}`);
     
     // Determine event type
     const eventType = getEventType(payload);
-    
-    console.log(`Processing event: ${eventType} for email: ${normalizedEmail}`);
+    console.log(`[CAKTO] Event type determined: ${eventType}`);
 
     // Initialize Supabase admin client
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("[CAKTO] ERROR: Missing Supabase environment variables!");
+      return new Response(JSON.stringify({ error: "Server configuration error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
     // Find existing user
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === normalizedEmail
-    );
+    console.log(`[CAKTO] Looking for existing user with email: ${email}`);
+    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error("[CAKTO] ERROR listing users:", listError);
+      throw listError;
+    }
 
-    // Handle DELETE events (refund, cancellation, payment failed)
+    const existingUser = existingUsers?.users?.find(
+      (u) => u.email?.toLowerCase() === email
+    );
+    
+    console.log(`[CAKTO] Existing user found: ${existingUser ? 'YES (ID: ' + existingUser.id + ')' : 'NO'}`);
+
+    // Handle DELETE events
     if (eventType === 'delete') {
       if (!existingUser) {
-        console.log(`User not found for deletion: ${normalizedEmail}`);
+        console.log(`[CAKTO] User not found for deletion, nothing to do`);
         return new Response(
           JSON.stringify({
             success: true,
@@ -201,57 +248,28 @@ Deno.serve(async (req) => {
       }
 
       const userId = existingUser.id;
-      console.log(`Deleting user: ${userId} (${normalizedEmail})`);
+      console.log(`[CAKTO] DELETING user: ${userId} (${email})`);
 
-      // Delete user plan first
-      const { error: planDeleteError } = await supabaseAdmin
-        .from("user_plans")
-        .delete()
-        .eq("user_id", userId);
-
-      if (planDeleteError) {
-        console.error("Error deleting user plan:", planDeleteError);
+      // Delete all related data
+      const tables = ['user_plans', 'profiles', 'authorized_ips', 'user_roles', 'user_group_unlocks', 'user_terms_acceptance', 'password_reset_codes', 'ip_unlock_slots'];
+      
+      for (const table of tables) {
+        const { error } = await supabaseAdmin.from(table).delete().eq("user_id", userId);
+        if (error) {
+          console.error(`[CAKTO] Error deleting from ${table}:`, error.message);
+        } else {
+          console.log(`[CAKTO] Deleted from ${table} ✓`);
+        }
       }
 
-      // Delete profile
-      const { error: profileDeleteError } = await supabaseAdmin
-        .from("profiles")
-        .delete()
-        .eq("user_id", userId);
-
-      if (profileDeleteError) {
-        console.error("Error deleting profile:", profileDeleteError);
-      }
-
-      // Delete authorized IPs
-      const { error: ipsDeleteError } = await supabaseAdmin
-        .from("authorized_ips")
-        .delete()
-        .eq("user_id", userId);
-
-      if (ipsDeleteError) {
-        console.error("Error deleting authorized IPs:", ipsDeleteError);
-      }
-
-      // Delete user roles
-      const { error: rolesDeleteError } = await supabaseAdmin
-        .from("user_roles")
-        .delete()
-        .eq("user_id", userId);
-
-      if (rolesDeleteError) {
-        console.error("Error deleting user roles:", rolesDeleteError);
-      }
-
-      // Finally delete the auth user
+      // Delete auth user
       const { error: userDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-
       if (userDeleteError) {
-        console.error("Error deleting auth user:", userDeleteError);
+        console.error("[CAKTO] ERROR deleting auth user:", userDeleteError);
         throw userDeleteError;
       }
 
-      console.log(`User completely deleted: ${userId}`);
+      console.log(`[CAKTO] User ${userId} completely deleted ✓`);
 
       return new Response(
         JSON.stringify({
@@ -267,91 +285,92 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Handle CREATE events (payment approved)
-    // Get product info for plan type
-    const productName = payload.product_name || payload.offer_name;
-    const productId = payload.product_id;
-    const planType = getPlanType(productName, productId);
-    const expirationDate = getExpirationDate(planType);
-    
-    console.log(`Creating/updating: email=${normalizedEmail}, plan=${planType}, expires=${expirationDate}`);
+    // Handle CREATE events - ALWAYS create lifetime plan
+    console.log(`[CAKTO] Processing CREATE event - will create LIFETIME plan`);
 
     let userId: string;
 
     if (existingUser) {
-      // User exists - update their plan
+      // User exists - just update their plan to active lifetime
       userId = existingUser.id;
-      console.log(`User already exists: ${userId}, updating plan`);
+      console.log(`[CAKTO] User exists: ${userId}, updating to active lifetime plan`);
       
-      // Upsert the plan
+      // Upsert the plan - always set to vitalicio/active
       const { error: planError } = await supabaseAdmin
         .from("user_plans")
         .upsert({
           user_id: userId,
-          plan_type: planType,
+          plan_type: "vitalicio",
           status: "active",
-          expires_at: expirationDate?.toISOString() || null,
+          expires_at: null,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: "user_id",
         });
 
       if (planError) {
-        console.error("Error updating plan:", planError);
+        console.error("[CAKTO] Error updating plan:", planError);
         throw planError;
       }
 
-      console.log(`Plan updated for existing user: ${userId}`);
+      console.log(`[CAKTO] Plan updated to LIFETIME for existing user ✓`);
     } else {
       // Create new user with default password
       const defaultPassword = "SUPORTE10#";
       
+      console.log(`[CAKTO] Creating NEW user: ${email}`);
+      console.log(`[CAKTO] Default password: ${defaultPassword}`);
+      
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: normalizedEmail,
+        email: email,
         password: defaultPassword,
-        email_confirm: true, // Auto-confirm email
+        email_confirm: true,
         user_metadata: {
-          name: normalizedEmail.split("@")[0], // Use email prefix as name
+          name: email.split("@")[0],
         },
       });
 
       if (createError) {
-        console.error("Error creating user:", createError);
+        console.error("[CAKTO] ERROR creating user:", createError);
         throw createError;
       }
 
       userId = newUser.user.id;
-      console.log(`New user created: ${userId}`);
+      console.log(`[CAKTO] New user created: ${userId} ✓`);
 
-      // Wait a moment for the trigger to create the profile
+      // Wait for trigger to create profile
+      console.log('[CAKTO] Waiting 500ms for profile trigger...');
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Create user plan
+      // Create lifetime plan
+      console.log('[CAKTO] Creating LIFETIME plan...');
       const { error: planError } = await supabaseAdmin
         .from("user_plans")
         .insert({
           user_id: userId,
-          plan_type: planType,
+          plan_type: "vitalicio",
           status: "active",
-          expires_at: expirationDate?.toISOString() || null,
+          expires_at: null,
         });
 
       if (planError) {
-        console.error("Error creating plan:", planError);
-        // Don't throw - user was created, plan can be added later
+        console.error("[CAKTO] Error creating plan:", planError);
+        // Don't throw - user was created successfully
+      } else {
+        console.log(`[CAKTO] Lifetime plan created for new user ✓`);
       }
-
-      console.log(`Plan created for new user: ${userId}, type: ${planType}`);
     }
 
-    // Return success
+    console.log('[CAKTO] ========== WEBHOOK COMPLETED SUCCESSFULLY ==========');
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: existingUser ? "Plan updated" : "User created",
+        message: existingUser ? "Plan updated to lifetime" : "User created with lifetime plan",
         user_id: userId,
-        plan_type: planType,
-        expires_at: expirationDate?.toISOString() || null,
+        email: email,
+        plan_type: "vitalicio",
+        expires_at: null,
         event: eventType,
       }),
       {
@@ -359,12 +378,17 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
+
   } catch (error) {
-    console.error("Webhook error:", error);
+    console.error("[CAKTO] ========== WEBHOOK ERROR ==========");
+    console.error("[CAKTO] Error:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
     return new Response(
       JSON.stringify({
         error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       }),
       {
         status: 500,

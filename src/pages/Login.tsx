@@ -143,8 +143,8 @@ const Login = () => {
           <p className="text-muted-foreground text-sm">
             Acesso exclusivo para assinantes.{" "}
             <a 
-              href="https://cakto.com" 
-              target="_blank" 
+              href="https://pay.cakto.com.br/ctz2hzj" 
+              target="_blank"
               rel="noopener noreferrer"
               className="text-primary font-semibold hover:underline"
             >

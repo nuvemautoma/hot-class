@@ -68,7 +68,7 @@ const Renewal = () => {
         {/* CTA */}
         <div className="space-y-3">
           <a
-            href="https://cakto.com"
+            href="https://pay.cakto.com.br/ctz2hzj"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full h-12 bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground font-bold text-base rounded-xl transition-all duration-200 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group"
