@@ -61,13 +61,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, email, password, name, userId, planType } = (body ?? {}) as {
+    const { action, email, password, name, userId, planType, expiresAt } = (body ?? {}) as {
       action?: "create" | "delete";
       email?: string;
       password?: string;
       name?: string;
       userId?: string;
       planType?: string;
+      expiresAt?: string | null;
     };
 
     if (action === "create") {
@@ -118,11 +119,17 @@ Deno.serve(async (req) => {
       // Wait for trigger to create profile
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Create user plan if specified
+      // Create user plan - use provided expiresAt or calculate based on planType
       if (planType) {
-        const expirationDate = planType === "vitalicio" ? null : 
-          planType === "trimestral" ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) :
-          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        let finalExpiresAt = expiresAt || null;
+        
+        // If no expiresAt provided, calculate from planType
+        if (!finalExpiresAt && planType !== "vitalicio") {
+          const expDate = planType === "trimestral" 
+            ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          finalExpiresAt = expDate.toISOString();
+        }
 
         const { error: planError } = await supabaseAdmin
           .from("user_plans")
@@ -130,12 +137,11 @@ Deno.serve(async (req) => {
             user_id: newUserId,
             plan_type: planType,
             status: "active",
-            expires_at: expirationDate?.toISOString() || null,
+            expires_at: finalExpiresAt,
           });
 
         if (planError) {
           console.error("Error creating plan:", planError);
-          // Don't fail - user was created
         }
       }
 

@@ -56,6 +56,13 @@ interface IPCount {
   count: number;
 }
 
+interface UserPlan {
+  user_id: string;
+  plan_type: string;
+  status: string;
+  expires_at: string | null;
+}
+
 const Admin = () => {
   const { user, profile, isOwner, session } = useAuth();
   const [activeTab, setActiveTab] = useState("accounts");
@@ -63,19 +70,23 @@ const Admin = () => {
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [userIPCounts, setUserIPCounts] = useState<IPCount[]>([]);
   const [userGroupUnlocks, setUserGroupUnlocks] = useState<string[]>([]);
+  const [userPlans, setUserPlans] = useState<UserPlan[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [logs, setLogs] = useState<AdminLog[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [unlockingUserId, setUnlockingUserId] = useState<string | null>(null);
+  const [editingPlanUser, setEditingPlanUser] = useState<UserProfile | null>(null);
+  const [editPlanForm, setEditPlanForm] = useState({ planType: "vitalicio", expiresInDays: "" });
+  const [editPlanOpen, setEditPlanOpen] = useState(false);
 
   // Form states
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newGroup, setNewGroup] = useState({ name: "", link: "", description: "" });
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [newNotification, setNewNotification] = useState({ title: "", message: "", targetUserId: "" });
-  const [newAccount, setNewAccount] = useState({ name: "", email: "", password: "" });
+  const [newAccount, setNewAccount] = useState({ name: "", email: "", password: "", planType: "vitalicio", expiresInDays: "" });
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", password: "" });
   const [disparadorLink, setDisparadorLink] = useState("");
@@ -106,12 +117,24 @@ const Admin = () => {
     await Promise.all([
       fetchUsers(),
       fetchUserRoles(),
+      fetchUserPlans(),
       fetchGroups(),
       fetchNotifications(),
       fetchLogs(),
       fetchUserGroupUnlocks(),
     ]);
     setLoading(false);
+  };
+
+  const fetchUserPlans = async () => {
+    const { data, error } = await supabase.from("user_plans").select("user_id, plan_type, status, expires_at");
+    if (!error && data) {
+      setUserPlans(data);
+    }
+  };
+
+  const getUserPlan = (userId: string): UserPlan | undefined => {
+    return userPlans.find((p) => p.user_id === userId);
   };
 
   const fetchDisparadorLink = async () => {
@@ -397,6 +420,29 @@ const Admin = () => {
       return;
     }
 
+    // Calculate expiration based on plan type
+    let planType = newAccount.planType || "vitalicio";
+    let expiresAt: string | null = null;
+    
+    if (planType === "dias" && newAccount.expiresInDays) {
+      const days = parseInt(newAccount.expiresInDays);
+      if (days > 0) {
+        const expDate = new Date();
+        expDate.setDate(expDate.getDate() + days);
+        expiresAt = expDate.toISOString();
+        planType = "mensal"; // Use mensal as base for custom days
+      }
+    } else if (planType === "mensal") {
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + 30);
+      expiresAt = expDate.toISOString();
+    } else if (planType === "trimestral") {
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + 90);
+      expiresAt = expDate.toISOString();
+    }
+    // vitalicio = null expires_at
+
     const { data, error } = await supabase.functions.invoke("admin-manage-user", {
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -406,6 +452,8 @@ const Admin = () => {
         email: newAccount.email,
         password: newAccount.password,
         name: newAccount.name,
+        planType: planType === "dias" ? "mensal" : planType,
+        expiresAt: expiresAt,
       },
     });
 
@@ -419,12 +467,74 @@ const Admin = () => {
       return;
     }
 
-    await logAction("Criou conta", { email: newAccount.email, name: newAccount.name });
+    await logAction("Criou conta", { 
+      email: newAccount.email, 
+      name: newAccount.name,
+      planType: planType,
+      expiresAt: expiresAt,
+    });
     toast.success("Conta criada com sucesso!");
-    setNewAccount({ name: "", email: "", password: "" });
+    setNewAccount({ name: "", email: "", password: "", planType: "vitalicio", expiresInDays: "" });
     setCreateAccountOpen(false);
     // Wait a bit for the profile trigger to create the profile
-    setTimeout(() => fetchUsers(), 1000);
+    setTimeout(() => {
+      fetchUsers();
+      fetchUserPlans();
+    }, 1000);
+  };
+
+  const handleEditPlan = async () => {
+    if (!editingPlanUser || !session?.access_token) return;
+
+    let expiresAt: string | null = null;
+    let planType = editPlanForm.planType;
+
+    if (planType === "dias" && editPlanForm.expiresInDays) {
+      const days = parseInt(editPlanForm.expiresInDays);
+      if (days > 0) {
+        const expDate = new Date();
+        expDate.setDate(expDate.getDate() + days);
+        expiresAt = expDate.toISOString();
+        planType = "mensal";
+      }
+    } else if (planType === "mensal") {
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + 30);
+      expiresAt = expDate.toISOString();
+    } else if (planType === "trimestral") {
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + 90);
+      expiresAt = expDate.toISOString();
+    }
+    // vitalicio = null
+
+    const { error } = await supabase
+      .from("user_plans")
+      .upsert({
+        user_id: editingPlanUser.user_id,
+        plan_type: planType === "dias" ? "mensal" : planType,
+        status: "active",
+        expires_at: expiresAt,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "user_id",
+      });
+
+    if (error) {
+      toast.error("Erro ao atualizar plano: " + error.message);
+      return;
+    }
+
+    await logAction("Atualizou plano", {
+      email: editingPlanUser.email,
+      planType: planType,
+      expiresAt: expiresAt,
+    });
+    toast.success("Plano atualizado!");
+    setEditPlanOpen(false);
+    setEditingPlanUser(null);
+    setEditPlanForm({ planType: "vitalicio", expiresInDays: "" });
+    fetchUserPlans();
   };
 
   const handleEditUser = async () => {
@@ -815,6 +925,31 @@ const Admin = () => {
                           placeholder="Senha inicial"
                         />
                       </div>
+                      <div>
+                        <Label>Tipo de Plano</Label>
+                        <select
+                          value={newAccount.planType}
+                          onChange={(e) => setNewAccount({ ...newAccount, planType: e.target.value })}
+                          className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                        >
+                          <option value="vitalicio">Vitalício (sem expiração)</option>
+                          <option value="mensal">Mensal (30 dias)</option>
+                          <option value="trimestral">Trimestral (90 dias)</option>
+                          <option value="dias">Personalizado (dias)</option>
+                        </select>
+                      </div>
+                      {newAccount.planType === "dias" && (
+                        <div>
+                          <Label>Quantidade de dias</Label>
+                          <Input
+                            type="number"
+                            value={newAccount.expiresInDays}
+                            onChange={(e) => setNewAccount({ ...newAccount, expiresInDays: e.target.value })}
+                            placeholder="Ex: 15"
+                            min="1"
+                          />
+                        </div>
+                      )}
                       <Button onClick={handleCreateAccount} className="w-full">
                         Criar Conta
                       </Button>
@@ -841,13 +976,39 @@ const Admin = () => {
                         <div className="flex-1">
                           <p className="font-medium text-sm">{userProfile.name || "Sem nome"}</p>
                           <p className="text-xs text-muted-foreground">{userProfile.email}</p>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <Badge variant={getUserRole(userProfile.user_id) === "Dono" ? "default" : getUserRole(userProfile.user_id) === "Admin" ? "secondary" : "outline"} className="text-[10px]">
                               {getUserRole(userProfile.user_id)}
                             </Badge>
                             <span className="text-[10px] text-muted-foreground">
                               IPs: {getIPCount(userProfile.user_id)}
                             </span>
+                            {(() => {
+                              const plan = getUserPlan(userProfile.user_id);
+                              if (!plan) {
+                                return (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    Sem plano
+                                  </Badge>
+                                );
+                              }
+                              const isExpired = plan.expires_at && new Date(plan.expires_at) < new Date();
+                              const isLifetime = plan.plan_type === "vitalicio";
+                              return (
+                                <Badge 
+                                  variant={isExpired ? "destructive" : isLifetime ? "default" : "secondary"} 
+                                  className="text-[10px]"
+                                >
+                                  <Icon name={isLifetime ? "all_inclusive" : "schedule"} size={10} className="mr-0.5" />
+                                  {isLifetime ? "Vitalício" : isExpired ? "Expirado" : `${plan.plan_type}`}
+                                  {!isLifetime && plan.expires_at && !isExpired && (
+                                    <span className="ml-1">
+                                      ({Math.ceil((new Date(plan.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))}d)
+                                    </span>
+                                  )}
+                                </Badge>
+                              );
+                            })()}
                             {isUserGroupsUnlocked(userProfile.user_id) && (
                               <Badge variant="default" className="text-[10px] bg-primary/80">
                                 <Icon name="lock_open" size={10} className="mr-0.5" />
@@ -874,6 +1035,22 @@ const Admin = () => {
                               </Button>
                             )}
                             <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => {
+                                const plan = getUserPlan(userProfile.user_id);
+                                setEditingPlanUser(userProfile);
+                                setEditPlanForm({ 
+                                  planType: plan?.plan_type || "vitalicio", 
+                                  expiresInDays: "" 
+                                });
+                                setEditPlanOpen(true);
+                              }}
+                              title="Editar plano"
+                            >
+                              <Icon name="credit_card" size={16} />
+                            </Button>
+                            <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => {
@@ -881,6 +1058,7 @@ const Admin = () => {
                                 setEditUserForm({ name: userProfile.name, email: userProfile.email, password: "" });
                                 setEditAccountOpen(true);
                               }}
+                              title="Editar conta"
                             >
                               <Icon name="edit" size={16} />
                             </Button>
@@ -889,6 +1067,7 @@ const Admin = () => {
                               size="icon"
                               onClick={() => handleDeleteUser(userProfile)}
                               className="text-destructive"
+                              title="Excluir conta"
                             >
                               <Icon name="delete" size={16} />
                             </Button>
@@ -934,6 +1113,49 @@ const Admin = () => {
                   </div>
                   <Button onClick={handleEditUser} className="w-full">
                     Salvar Alterações
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit Plan Dialog */}
+            <Dialog open={editPlanOpen} onOpenChange={setEditPlanOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Editar Plano</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm font-medium">{editingPlanUser?.name || "Sem nome"}</p>
+                    <p className="text-xs text-muted-foreground">{editingPlanUser?.email}</p>
+                  </div>
+                  <div>
+                    <Label>Tipo de Plano</Label>
+                    <select
+                      value={editPlanForm.planType}
+                      onChange={(e) => setEditPlanForm({ ...editPlanForm, planType: e.target.value })}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                    >
+                      <option value="vitalicio">Vitalício (sem expiração)</option>
+                      <option value="mensal">Mensal (30 dias)</option>
+                      <option value="trimestral">Trimestral (90 dias)</option>
+                      <option value="dias">Personalizado (dias)</option>
+                    </select>
+                  </div>
+                  {editPlanForm.planType === "dias" && (
+                    <div>
+                      <Label>Quantidade de dias (a partir de hoje)</Label>
+                      <Input
+                        type="number"
+                        value={editPlanForm.expiresInDays}
+                        onChange={(e) => setEditPlanForm({ ...editPlanForm, expiresInDays: e.target.value })}
+                        placeholder="Ex: 15"
+                        min="1"
+                      />
+                    </div>
+                  )}
+                  <Button onClick={handleEditPlan} className="w-full">
+                    Salvar Plano
                   </Button>
                 </div>
               </DialogContent>
